@@ -3,6 +3,7 @@ All notable changes to this project will be documented in this file.
 This project uses the changelog in accordance with [keepchangelog](http://keepachangelog.com/). Please use this to write notable changes, which is not the same as git commit log...
 
 ## [unreleased][unreleased]
+ - Modified 'update.sh' and 'proxmark.sh' script to work in macOS and Linux (@joanbono)
  - Added more default keys  (@j8048188) (@iceman)
  - Added 'sc list/info/raw/reader/upgrade' - (RDV40) smart card module functionality  (@iceman)
  - Fix 'download eml buffer' (@drandreas)
