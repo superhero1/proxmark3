@@ -41,7 +41,7 @@ local qt5Core=$(find /usr -name Qt5Core.pc 2>/dev/null)
     chmod 444 $QT_PKG_CONFIG_QT5CORE
   )
   # install iceman fork- proxmark3
-    git clone https://github.com/iceman1001/proxmark3.git
+    git clone https://github.com/iceman1001/proxmark3.git .
       (
         cd proxmark3 || exit 1
         git reset --hard
