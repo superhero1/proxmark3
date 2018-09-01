@@ -13,6 +13,7 @@
 static int CmdHelp(const char *Cmd);
 static int CmdQuit(const char *Cmd);
 static int CmdRev(const char *Cmd);
+static int CmdRem(const char *Cmd);
 
 //For storing command that are received from the device
 static UsbCommand cmdBuffer[CMD_BUFFER_SIZE];
@@ -33,6 +34,7 @@ static command_t CommandTable[] = {
 	{"hf",		CmdHF,		1, "{ High Frequency commands... }"},
 	{"hw",		CmdHW,		1, "{ Hardware commands... }"},
 	{"lf",		CmdLF,		1, "{ Low Frequency commands... }"},
+	{"rem",		CmdRem, 	1, "{ Display remark }"},
 	{"reveng",	CmdRev, 	1, "{ Crc calculations from the software reveng 1.53... }"},
 	{"script",	CmdScript,	1, "{ Scripting commands }"},
 	{"trace",	CmdTrace,	1, "{ Trace manipulation... }"},
@@ -65,6 +67,18 @@ int CmdRev(const char *Cmd) {
 	return 0;
 }
 
+int CmdRem(const char *Cmd) {
+	char buf[22];
+
+	memset(buf, 0x00, sizeof(buf));
+	struct tm *curTime;
+	time_t now = time(0);
+	curTime = gmtime(&now);
+	strftime (buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", curTime); // ISO8601
+	PrintAndLogEx(NORMAL, "%s: %s", buf, Cmd);
+	return 0;
+}
+			
 bool dl_it(uint8_t *dest, uint32_t bytes, uint32_t start_index, UsbCommand *response, size_t ms_timeout, bool show_warning, uint32_t rec_cmd);
 /**
  * @brief This method should be called when sending a new command to the pm3. In case any old
