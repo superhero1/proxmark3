@@ -34,7 +34,7 @@ static command_t CommandTable[] = {
 	{"hf",		CmdHF,		1, "{ High Frequency commands... }"},
 	{"hw",		CmdHW,		1, "{ Hardware commands... }"},
 	{"lf",		CmdLF,		1, "{ Low Frequency commands... }"},
-	{"rem",		CmdRem, 	1, "{ Display remark }"},
+	{"rem",		CmdRem, 	1, "{ Add text to row in log file }"},
 	{"reveng",	CmdRev, 	1, "{ Crc calculations from the software reveng 1.53... }"},
 	{"script",	CmdScript,	1, "{ Scripting commands }"},
 	{"trace",	CmdTrace,	1, "{ Trace manipulation... }"},
