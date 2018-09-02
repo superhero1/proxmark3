@@ -75,7 +75,7 @@ int CmdRem(const char *Cmd) {
 	time_t now = time(0);
 	curTime = gmtime(&now);
 	strftime (buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", curTime); // ISO8601
-	PrintAndLogEx(NORMAL, "%s: %s", buf, Cmd);
+	PrintAndLogEx(NORMAL, "%s remark: %s", buf, Cmd);
 	return 0;
 }
 			
