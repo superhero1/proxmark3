@@ -374,7 +374,7 @@ static const char StrManufacturer[] = {
 
 // Note: This matches upstream proxmark3 USB descriptors.
 static const char StrProduct[] = {
-	20,			// Length
+	20,		// Length
 	0x03,		// Type is string
 	'p', 0,
 	'r', 0,
@@ -388,21 +388,19 @@ static const char StrProduct[] = {
 };
 
 static const char StrSerialNumber[] = {
-	14,			// Length
+	10,		// Length
 	0x03,		// Type is string
-	'i', 0,
-	'c', 0,
-	'e', 0,
-	'm', 0,
-	'a', 0,
-	'n', 0,
+	'8', 0,
+	'8', 0,
+	'8', 0,
+	'8', 0,
 };
 
 // size includes their own field.
 static const char StrMS_OSDescriptor[] = {
-    18,			// length 0x12
+	18,		// length 0x12
 	0x03,		// Type is string
-    'M',0,'S',0,'F',0,'T',0,'1',0,'0',0,'0',0,MS_VENDOR_CODE,0
+	'M',0,'S',0,'F',0,'T',0,'1',0,'0',0,'0',0,MS_VENDOR_CODE,0
 };
 
 const char* getStringDescriptor(uint8_t idx) {
