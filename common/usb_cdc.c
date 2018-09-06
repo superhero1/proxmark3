@@ -388,7 +388,7 @@ static const char StrProduct[] = {
 };
 
 static const char StrSerialNumber[] = {
-	22,			// Length
+	14,			// Length
 	0x03,		// Type is string
 	'i', 0,
 	'c', 0,
@@ -396,10 +396,6 @@ static const char StrSerialNumber[] = {
 	'm', 0,
 	'a', 0,
 	'n', 0,
-	'1', 0,
-	'0', 0,
-	'0', 0,
-	'1', 0
 };
 
 // size includes their own field.
