@@ -167,7 +167,7 @@ void
 __attribute__((force_align_arg_pointer)) 
 #endif
 #endif
-main_loop(char *script_cmds_file, char *script_cmd, bool usb_present) {
+main_loop(char *script_cmds_file, char *script_cmd, bool usb_present, bool stayInCommandLoop) {
 
 	struct receiver_arg rarg;
 	char *cmd = NULL;
@@ -193,7 +193,11 @@ main_loop(char *script_cmds_file, char *script_cmd, bool usb_present) {
 		
 		sf = fopen(script_cmds_file, "r");		
 		if (sf)
+		{
 			PrintAndLogEx(SUCCESS, "executing commands from file: %s\n", script_cmds_file);
+			if (stayInCommandLoop)
+				PrintAndLogEx(SUCCESS, "staying in command loop after commands execution\n");
+		}
 	}
 
 	read_history(".history");
@@ -247,7 +251,7 @@ main_loop(char *script_cmds_file, char *script_cmd, bool usb_present) {
 				execCommand = false;
 			} else {
 				// exit after exec command
-				if (script_cmd)
+				if (script_cmd && !stayInCommandLoop)
 					break;
 
 				// if there is a pipe from stdin
@@ -293,7 +297,8 @@ main_loop(char *script_cmds_file, char *script_cmd, bool usb_present) {
 			cmd = NULL;
 		} else {
 			PrintAndLogEx(NORMAL, "\n");
-			break;
+			if (!stayInCommandLoop)
+				break;
 		}
 	} // end while 
 	
@@ -346,7 +351,7 @@ static void set_my_executable_path(void) {
 }
 
 static void show_help(bool showFullHelp, char *command_line){
-	PrintAndLogEx(NORMAL, "syntax: %s <port> [-h|-help|-m|-f|-flush|-w|-wait|-c|-command|-l|-lua] [cmd_script_file_name] [command][lua_script_name]\n", command_line);
+	PrintAndLogEx(NORMAL, "syntax: %s <port> [-h|-help|-m|-f|-flush|-w|-wait|-c|-command|-l|-lua|-s|-stay] [cmd_script_file_name] [command][lua_script_name]\n", command_line);
 	PrintAndLogEx(NORMAL, "\texample:'%s "SERIAL_PORT_H"'\n\n", command_line);
 	
 	if (showFullHelp){
@@ -364,6 +369,9 @@ static void show_help(bool showFullHelp, char *command_line){
 		PrintAndLogEx(NORMAL, "\t%s "SERIAL_PORT_H" -command \"hf mf nested 1 *\"\n\n", command_line);
 		PrintAndLogEx(NORMAL, "lua: <-l|-lua> Execute lua script.\n");
 		PrintAndLogEx(NORMAL, "\t%s "SERIAL_PORT_H" -l hf_read\n\n", command_line);
+		PrintAndLogEx(NORMAL, "stay: <-s|-stay> Stay in the command loop after script/command/lua execution.\n");
+		PrintAndLogEx(NORMAL, "\t%s "SERIAL_PORT_H" -s scriptfile\n\n", command_line);
+		PrintAndLogEx(NORMAL, "\t%s "SERIAL_PORT_H" -stay -l hf_read\n\n", command_line);
 	}
 }
 
@@ -374,6 +382,7 @@ int main(int argc, char* argv[]) {
 	bool waitCOMPort = false;
 	bool executeCommand = false;
 	bool addLuaExec = false;
+	bool stayInCommandLoop = false;
 	char *script_cmds_file = NULL;
 	char *script_cmd = NULL;
 
@@ -425,6 +434,11 @@ int main(int argc, char* argv[]) {
 			executeCommand = true;
 			addLuaExec = true;
 		}
+		
+		// stay in command loop
+		if(strcmp(argv[i], "-s") == 0 || strcmp(argv[i], "-stay") == 0){
+			stayInCommandLoop = true;
+		}
 	}
 
 	// If the user passed the filename of the 'script' to execute, get it from last parameter
@@ -451,6 +465,8 @@ int main(int argc, char* argv[]) {
 				}
 				
 				PrintAndLogEx(SUCCESS, "execute command from commandline: %s\n", script_cmd);
+				if (stayInCommandLoop)
+					PrintAndLogEx(SUCCESS, "staying in command loop after command execution\n");
 			}
 		} else {
 			script_cmds_file = argv[argc - 1];
@@ -510,21 +526,21 @@ int main(int argc, char* argv[]) {
 #ifdef HAVE_GUI
 
 #  ifdef _WIN32
-	InitGraphics(argc, argv, script_cmds_file, script_cmd, usb_present);
+	InitGraphics(argc, argv, script_cmds_file, script_cmd, usb_present, stayInCommandLoop);
 	MainGraphics();
 #  else
 	// for *nix distro's,  check enviroment variable to verify a display
 	char* display = getenv("DISPLAY");
 	if (display && strlen(display) > 1) {
-		InitGraphics(argc, argv, script_cmds_file, script_cmd, usb_present);
+		InitGraphics(argc, argv, script_cmds_file, script_cmd, usb_present, stayInCommandLoop);
 		MainGraphics();
 	} else {
-		main_loop(script_cmds_file, script_cmd, usb_present);
+		main_loop(script_cmds_file, script_cmd, usb_present, stayInCommandLoop);
 	}
 #  endif
 	
 #else
-	main_loop(script_cmds_file, script_cmd, usb_present);
+	main_loop(script_cmds_file, script_cmd, usb_present, stayInCommandLoop);
 #endif	
  
 	// clean up mutex
