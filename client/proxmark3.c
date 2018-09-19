@@ -351,7 +351,7 @@ static void set_my_executable_path(void) {
 }
 
 static void show_help(bool showFullHelp, char *command_line){
-	PrintAndLogEx(NORMAL, "syntax: %s <port> [-h|-help|-m|-f|-flush|-w|-wait|-c|-command|-l|-lua|-s|-stay] [cmd_script_file_name] [command][lua_script_name]\n", command_line);
+	PrintAndLogEx(NORMAL, "syntax: %s <port> [-h|-help|-m|-f|-flush|-w|-wait|-c|-command|-l|-lua|-k] [cmd_script_file_name] [command][lua_script_name]\n", command_line);
 	PrintAndLogEx(NORMAL, "\texample:'%s "SERIAL_PORT_H"'\n\n", command_line);
 	
 	if (showFullHelp){
@@ -369,9 +369,8 @@ static void show_help(bool showFullHelp, char *command_line){
 		PrintAndLogEx(NORMAL, "\t%s "SERIAL_PORT_H" -command \"hf mf nested 1 *\"\n\n", command_line);
 		PrintAndLogEx(NORMAL, "lua: <-l|-lua> Execute lua script.\n");
 		PrintAndLogEx(NORMAL, "\t%s "SERIAL_PORT_H" -l hf_read\n\n", command_line);
-		PrintAndLogEx(NORMAL, "stay: <-s|-stay> Stay in the command loop after script/command/lua execution.\n");
-		PrintAndLogEx(NORMAL, "\t%s "SERIAL_PORT_H" -s scriptfile\n\n", command_line);
-		PrintAndLogEx(NORMAL, "\t%s "SERIAL_PORT_H" -stay -l hf_read\n\n", command_line);
+		PrintAndLogEx(NORMAL, "stay: <-k> Stay in the command loop after script/command/lua execution.\n");
+		PrintAndLogEx(NORMAL, "\t%s "SERIAL_PORT_H" -k scriptfile\n\n", command_line);
 	}
 }
 
@@ -436,7 +435,7 @@ int main(int argc, char* argv[]) {
 		}
 		
 		// stay in command loop
-		if(strcmp(argv[i], "-s") == 0 || strcmp(argv[i], "-stay") == 0){
+		if(strcmp(argv[i], "-k") == 0){
 			stayInCommandLoop = true;
 		}
 	}
