@@ -95,13 +95,14 @@ class ProxWidget : public QWidget
 class WorkerThread : public QThread {
 		Q_OBJECT;
 	public:
-		WorkerThread(char*, char*, bool);
+		WorkerThread(char*, char*, bool, bool);
 		~WorkerThread();
 		void run();
 	private:
 		char *script_cmds_file = NULL;
 		char *script_cmd = NULL;
 		bool usb_present;
+		bool stayInCommandLoop;
 };
 
 class ProxGuiQT : public QObject
