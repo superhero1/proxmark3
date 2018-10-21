@@ -19,7 +19,7 @@ my $ctime;
 # GIT status  0 = dirty,  1 = clean ,  2 = undecided
 my $clean = 2;
 # Do we have acces to git command? 
-my $commandGIT = `bash which git`;
+my $commandGIT = `env -S which git`;
 
 if ( defined($commandGIT) )  {
 
