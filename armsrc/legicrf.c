@@ -81,7 +81,7 @@ static inline uint8_t rx_byte_from_fpga() {
 // To reduce CPU time the amplitude is approximated by using linear functions:
 //   am = MAX(ABS(i),ABS(q)) + 1/2*MIN(ABS(i),ABSq))
 //
-// Note: The SSC receiver is never synchronized the calculation my be performed
+// Note: The SSC receiver is never synchronized the calculation may be performed
 // on a i/q pair from two subsequent correlations, but does not matter.
 static inline int32_t sample_power() {
   int32_t q = (int8_t)rx_byte_from_fpga(); q = ABS(q);
