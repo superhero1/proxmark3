@@ -14,7 +14,7 @@ That one is a beauty!
 
 
 ## Nothing says thank you as much as a donation 
-https://paypal.me/iceman1001/  Feel free to donate. All support is welcome.
+https://www.patreon.com/iceman1001  Feel free to donate. All support is welcome.
 
 monereo:  43mNJLpgBVaTvyZmX9ajcohpvVkaRy1kbZPm8tqAb7itZgfuYecgkRF36rXrKFUkwEGeZedPsASRxgv4HPBHvJwyJdyvQuP
 
