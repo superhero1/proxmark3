@@ -67,9 +67,9 @@ typedef struct {
 } serial_port_unix;
 
 // Set time-out on 30 miliseconds
-const struct timeval timeout = {
+struct timeval timeout = {
   .tv_sec  =     0, // 0 second
-  .tv_usec = 300000  // 300000 micro seconds
+  .tv_usec = 30000  // 30000 micro seconds
 };
 
 serial_port uart_open(const char* pcPortName)
@@ -86,7 +86,11 @@ serial_port uart_open(const char* pcPortName)
     }
     char *colon = strrchr(addrstr, ':');
     char *portstr;
-    if (colon) {
+
+    // Set time-out to 300 miliseconds only for TCP port
+    timeout.tv_usec = 300000;
+
+if (colon) {
       portstr = colon + 1;
       *colon = '\0';
     } else
