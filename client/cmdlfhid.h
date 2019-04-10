@@ -39,5 +39,5 @@ extern int usage_lf_hid_clone(void);
 extern int usage_lf_hid_brute(void);
 
 //void calc26(uint16_t fc, uint32_t cardno, uint8_t *out);
-extern void calcWiegand(uint8_t fmtlen, uint16_t fc, uint64_t cardno, uint8_t *bits);
+extern void calcWiegand(uint8_t fmtlen, uint16_t fc, uint64_t cardno, uint8_t *bits, uint8_t oem);
 #endif

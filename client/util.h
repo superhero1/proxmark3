@@ -233,6 +233,7 @@ extern int binarraytohex( char *target,  char *source,  int length);
 extern void binarraytobinstring(char *target,  char *source,  int length);
 extern uint8_t GetParity( uint8_t *string, uint8_t type,  int length);
 extern void wiegand_add_parity(uint8_t *target, uint8_t *source, uint8_t length);
+extern void wiegand_add_parity_swapped(uint8_t *target, uint8_t *source, uint8_t length);
 
 extern void xor(unsigned char * dst, unsigned char * src, size_t len);
 extern int32_t le24toh (uint8_t data[3]);
