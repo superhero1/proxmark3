@@ -67,7 +67,7 @@ local function parse14443a(data)
 	local count, uid, uidlen, atqa, sak, ats_len, ats = bin.unpack('H10CH2CC',data)
 	uid = uid:sub(1, 2*uidlen)
 	--print("uid, atqa, sak: ",uid, atqa, sak)
-	--print("TYPE: ", tostring_1443a(sak))
+	--print("TYPE: ", tostring_14443a(sak))
 	return { uid = uid, atqa  = atqa, sak = sak, name = tostring_14443a(sak), data = data}
 end
 
@@ -141,7 +141,7 @@ local function waitFor14443a()
 end
 local library = {
 	read = read14443a,
-	read 	= read14443a,
+	read14443a = read14443a,
 	waitFor14443a = waitFor14443a,
 	parse14443a = parse14443a,
 	sendToDevice = sendToDevice,
