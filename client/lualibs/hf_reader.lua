@@ -21,13 +21,7 @@ local function sendToDevice(command, ignoreresponse)
 	return response,nil
 end
 
--------------------------------------------------------
--- This will be moved to a separate 14443B library
--------------------------------------------------------
 
-local reader14443B = {
-	read = reader14443B.read14443b()
-}	
 -------------------------------------------------------
 -- This will be moved to a separate 1593 library
 -------------------------------------------------------

@@ -1255,7 +1255,7 @@ uint8_t iso14443b_select_card(iso14b_card_select_t *card ) {
 	
 	// VALIDATE CRC
 	if (!check_crc(CRC_14443_B, Demod.output, Demod.len)) {
-		if (MF_DBGLEVEL > 3) Dbprintf("iso1443b_setup crc fail");
+		if (MF_DBGLEVEL > 3) Dbprintf("iso14443b_setup crc fail");
 		return 3;
 	}
 	
@@ -1280,7 +1280,7 @@ uint8_t iso14443b_select_card(iso14b_card_select_t *card ) {
 
 	// VALIDATE CRC
 	if (!check_crc(CRC_14443_B, Demod.output, Demod.len) ) {
-		if (MF_DBGLEVEL > 3) Dbprintf("iso1443b_setup crc2 fail");
+		if (MF_DBGLEVEL > 3) Dbprintf("iso14443b_setup crc2 fail");
 		return 3;
 	}
 
@@ -1314,7 +1314,7 @@ uint8_t iso14443b_select_card(iso14b_card_select_t *card ) {
 // Set up ISO 14443 Type B communication (similar to iso14443a_setup)
 // field is setup for "Sending as Reader"
 void iso14443b_setup() {
-	if (MF_DBGLEVEL > 3) Dbprintf("iso1443b_setup Enter");
+	if (MF_DBGLEVEL > 3) Dbprintf("iso14443b_setup Enter");
 	LEDsoff();
 	FpgaDownloadAndGo(FPGA_BITSTREAM_HF);
 	//BigBuf_free();
@@ -1338,7 +1338,7 @@ void iso14443b_setup() {
 	StartCountSspClk();
 	
 	LED_D_ON();
-	if (MF_DBGLEVEL > 3) Dbprintf("iso1443b_setup Exit");
+	if (MF_DBGLEVEL > 3) Dbprintf("iso14443b_setup Exit");
 }
 
 //-----------------------------------------------------------------------------
@@ -1471,7 +1471,7 @@ void ReadSTMemoryIso14443b(uint8_t numofblocks) {
 }
 
 static void iso1444b_setup_sniff(void){
-	if (MF_DBGLEVEL > 3) Dbprintf("iso1443b_setup_sniff Enter");
+	if (MF_DBGLEVEL > 3) Dbprintf("iso14443b_setup_sniff Enter");
 	LEDsoff();
 	FpgaDownloadAndGo(FPGA_BITSTREAM_HF);
 	BigBuf_free();
@@ -1505,7 +1505,7 @@ static void iso1444b_setup_sniff(void){
 	// Start the SSP timer
 	StartCountSspClk();
 
-	if (MF_DBGLEVEL > 3) Dbprintf("iso1443b_setup_sniff Exit");
+	if (MF_DBGLEVEL > 3) Dbprintf("iso14443b_setup_sniff Exit");
 }
 
 //=============================================================================
