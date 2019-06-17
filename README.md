@@ -6,7 +6,8 @@ Iceman fork
 I don't spend much time on this repo, the last years changes has all gone into the Proxmark3 RDV4.0 repo.
 
 ## Proxmark3 RDV4.0 
-[proxmark3 RDV4.0 Github Repository](https://github.com/RfidResearchGroup/proxmark3)
+Ref:  [Proxmark3 RDV4.0 github repository](https://github.com/RfidResearchGroup/proxmark3)
+
 The RRG repo is based upon this repo. Much development has been put into the RRG repo to bring support to all new hardware features.
 The repo fully support all of them;   like the flashmemory, smarcard sim module, high powered antennas,  FPC port with serial over USART to mention them briefly.
 
