@@ -3,20 +3,25 @@ Iceman fork
 [![Build Status](https://travis-ci.org/iceman1001/proxmark3.svg?branch=master)](https://travis-ci.org/iceman1001/proxmark3)[![Coverity Status](https://scan.coverity.com/projects/5117/badge.svg)](https://scan.coverity.com/project/proxmark3_iceman_fork)[![Latest release](https://img.shields.io/github/release/iceman1001/proxmark3.svg)](https://github.com/iceman1001/proxmark3/releases/latest)
 
 ## This fork is HIGHLY experimental and bleeding edge
+I don't spend much time on this repo, the last years changes has all gone into the Proxmark3 RDV4.0 repo.
 
+## Proxmark3 RDV4.0 
+[proxmark3 RDV4.0 Github Repository](https://github.com/RfidResearchGroup/proxmark3)
+The RRG repo is based upon this repo. Much development has been put into the RRG repo to bring support to all new hardware features.
+The repo fully support all of them;   like the flashmemory, smarcard sim module, high powered antennas,  FPC port with serial over USART to mention them briefly.
 
-The kickstarter for the latest revision of proxmark is out. 
-[proxmark3 rdv4.0](https://www.kickstarter.com/projects/1408815241/proxmark3-rdv-40)
+The RRG repo has a universial Proxmark client. The repo can be easily (I really mean it) for all kinds of Proxmark3 devices,  like the green pcb,  RDV2.0,  RDV3.0 Easy,  Proxmark Evolution, etc.   It also fully supports and compiles a range of standalone modes with just one setting in the Makefile.  Proxmarking has never been this easy.
+I do recommend you check it out.  
 
-That one is a beauty!
-
-
+This iceman repo will live on like it is.  
 
 
 ## Nothing says thank you as much as a donation 
-https://www.patreon.com/iceman1001  Feel free to donate. All support is welcome.
+If you feel the love,  do feel free to become a iceman patron. For some tiers it comes with rewards
+https://www.patreon.com/iceman1001 
 
-monereo:  43mNJLpgBVaTvyZmX9ajcohpvVkaRy1kbZPm8tqAb7itZgfuYecgkRF36rXrKFUkwEGeZedPsASRxgv4HPBHvJwyJdyvQuP
+All support is welcome.
+
 
 ## Notice      
 There is so much in this fork,  with all fixes and additions its basically the most enhanced fork to this day for the Proxmark3 device. Which makes it so awesum to play with. Do please play with it. Get excited and experiment. As a side note with all coverity scan fixes this client is much more stable than PM3 Master even if I tend to break it sometimes. I'll try to make a release when this fork becomes stable between my experiments.
