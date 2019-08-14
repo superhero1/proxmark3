@@ -12,14 +12,7 @@ The repo fully support all of them;   like the flashmemory, smarcard sim module,
 The RRG repo has a universial Proxmark client. The repo can be easily (I really mean it) for all kinds of Proxmark3 devices,  like the green pcb,  RDV2.0,  RDV3.0 Easy,  Proxmark Evolution, etc.   It also fully supports and compiles a range of standalone modes with just one setting in the Makefile.  Proxmarking has never been this easy.
 I do recommend you check it out.  
 
-======================================================================================================
-
-
-
-## This fork is HIGHLY experimental and bleeding edge
-I don't spend much time on this repo, the last years changes has all gone into the Proxmark3 RDV4.0 repo.
-
-
+===============================================================================
 
 
 ## Nothing says thank you as much as a donation 
