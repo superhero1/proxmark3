@@ -9,7 +9,7 @@ Ref:  [Proxmark3 RDV4.0 github repository](https://github.com/RfidResearchGroup/
 The RRG/Iceman repo is based upon this repo. Much development has been put into the RRG repo to bring support to all new hardware features.
 The repo fully support all of them;   like the flashmemory, smarcard sim module, high powered antennas,  FPC port with serial over USART to mention them briefly.
 
-The RRG repo has a universial Proxmark client. The repo can be easily (I really mean it) for all kinds of Proxmark3 devices,  like the green pcb,  RDV2.0,  RDV3.0 Easy,  Proxmark Evolution, etc.   It also fully supports and compiles a range of standalone modes with just one setting in the Makefile.  Proxmarking has never been this easy.
+The RRG repo has a universial Proxmark client. The repo can be easily (I really mean it) used with all kinds of Proxmark3 devices,  like the green pcb,  RDV2.0,  RDV3.0 Easy,  Proxmark Evolution, etc.   It also fully supports and compiles a range of standalone modes with just one setting in the Makefile.  Proxmarking has never been this easy.
 I do recommend you check it out.  
 
 ===============================================================================
