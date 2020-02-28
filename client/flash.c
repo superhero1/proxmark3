@@ -15,9 +15,6 @@ void ReceiveCommand(UsbCommand* rxcmd);
 void CloseProxmark();
 int OpenProxmark();
 
-// FIXME: what the fuckity fuck
-unsigned int current_command = CMD_UNKNOWN;
-
 #define FLASH_START            0x100000
 
 #ifdef HAS_512_FLASH
@@ -41,7 +38,7 @@ static const uint8_t elf_ident[] = {
 
 // Turn PHDRs into flasher segments, checking for PHDR sanity and merging adjacent
 // unaligned segments if needed
-static int build_segs_from_phdrs(flash_file_t *ctx, FILE *fd, Elf32_Phdr *phdrs, int num_phdrs) {
+static int build_segs_from_phdrs(flash_file_t *ctx, FILE *fd, Elf32_Phdr *phdrs, uint16_t num_phdrs) {
 	Elf32_Phdr *phdr = phdrs;
 	flash_seg_t *seg;
 	uint32_t last_end = 0;
@@ -190,7 +187,7 @@ int flash_load(flash_file_t *ctx, const char *name, int can_write_bl) {
 	FILE *fd = NULL;
 	Elf32_Ehdr ehdr;
 	Elf32_Phdr *phdrs = NULL;
-	int num_phdrs;
+	uint16_t num_phdrs;
 	int res;
 
 	fd = fopen(name, "rb");
@@ -345,7 +342,10 @@ static int wait_for_ack(UsbCommand *ack) {
 	ReceiveCommand(ack);
 
 	if (ack->cmd != CMD_ACK) {
-		printf("Error: Unexpected reply 0x%04" PRIx64 " %s (expected ACK)\n", ack->cmd, (ack->cmd == CMD_NACK) ? "NACK" : "");
+		printf("Error: Unexpected reply 0x%04" PRIx64 " %s (expected ACK)\n",
+			ack->cmd,
+			(ack->cmd == CMD_NACK) ? "NACK" : ""
+			);
 		return -1;
 	}
 	return 0;
@@ -437,8 +437,7 @@ int flash_write(flash_file_t *ctx) {
 			baddr += block_size;
 			length -= block_size;
 			block++;
-			fprintf(stdout, ".");
-			fflush(stdout);
+			fprintf(stdout, "."); fflush(stdout);
 		}
 		fprintf(stdout, " OK\n");
 		fflush(stdout);

@@ -16,7 +16,6 @@
 #include <string.h>
 #include <sys/stat.h>
 #include "iso14443crc.h" // Can also be used for iClass, using 0xE012 as CRC-type
-#include "data.h"
 #include "proxmark3.h"
 #include "ui.h"
 #include "cmdparser.h"
@@ -73,7 +72,9 @@ extern int CmdHFiClassSniff(const char *Cmd);
 extern int CmdHFiClassSim(const char *Cmd);
 extern int CmdHFiClassWriteKeyFile(const char *Cmd);
 extern int CmdHFiClass_WriteBlock(const char *Cmd);
-extern int CmdHF14AMfChk(const char *Cmd);
+extern int CmdHFiClassCheckKeys(const char *Cmd);
+extern int CmdHFiClassLookUp(const char *Cmd);
+extern int CmdHFiClassPermuteKey(const char *Cmd);
 
 void printIclassDumpContents(uint8_t *iclass_dump, uint8_t startblock, uint8_t endblock, size_t filesize);
 void HFiClassCalcDivKey(uint8_t	*CSN, uint8_t	*KEY, uint8_t *div_key, bool elite);

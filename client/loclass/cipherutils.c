@@ -155,59 +155,43 @@ void reverse_arraycopy(uint8_t* arr, uint8_t* dest, size_t len)
 	}
 }
 
-void printarr(char * name, uint8_t* arr, int len)
-{
-	int cx;
-	size_t outsize = 40+strlen(name)+len*5;
-	char* output = malloc(outsize);
-	memset(output, 0,outsize);
-
-	int i ;
+void printarr(char * name, uint8_t* arr, int len) {
+	int cx, i;
+	size_t outsize = 40 + strlen(name) + len*5;
+	char* output = calloc(outsize, sizeof(char));
 	cx = snprintf(output,outsize, "uint8_t %s[] = {", name);
-	for(i =0 ;  i< len ; i++)
-	{
+	for (i=0; i < len; i++) {
 		cx += snprintf(output+cx,outsize-cx,"0x%02x,",*(arr+i));//5 bytes per byte
 	}
 	cx += snprintf(output+cx,outsize-cx,"};");
-	prnlog(output);
+	PrintAndLogDevice(NORMAL, output);
 	free(output);
 }
 
-void printvar(char * name, uint8_t* arr, int len)
-{
-	int cx;
-	size_t outsize = 40+strlen(name)+len*2;
-	char* output = malloc(outsize);
-	memset(output, 0,outsize);
-
-	int i ;
+void printvar(char * name, uint8_t* arr, int len) {
+	int cx, i;
+	size_t outsize = 40 + strlen(name) + len*2;
+	char* output = calloc(outsize, sizeof(char));
 	cx = snprintf(output,outsize,"%s = ", name);
-	for(i =0 ;  i< len ; i++)
-	{
+	for (i=0; i < len; i++) {
 		cx += snprintf(output+cx,outsize-cx,"%02x",*(arr+i));//2 bytes per byte
 	}
 
-	prnlog(output);
+	PrintAndLogDevice(NORMAL, output);
 	free(output);
 }
 
-void printarr_human_readable(char * title, uint8_t* arr, int len)
-{
-	int cx;
-	size_t outsize = 100+strlen(title)+len*4;
-	char* output = malloc(outsize);
-	memset(output, 0,outsize);
-
-
-	int i;
+void printarr_human_readable(char * title, uint8_t* arr, int len) {
+	int cx, i;
+	size_t outsize = 100 + strlen(title) + len*4;
+	char* output = calloc(outsize, sizeof(char));
 	cx = snprintf(output,outsize,  "\n\t%s\n", title);
-	for(i =0 ;  i< len ; i++)
-	{
-		if(i % 16 == 0)
+	for (i=0;  i < len; i++) {
+		if (i % 16 == 0)
 			cx += snprintf(output+cx,outsize-cx,"\n%02x| ", i );
 		cx += snprintf(output+cx,outsize-cx, "%02x ",*(arr+i));
 	}
-	prnlog(output);
+	PrintAndLogDevice(NORMAL, output);
 	free(output);
 }
 
@@ -231,14 +215,14 @@ int testBitStream()
 	}
 	if(memcmp(input, output, sizeof(input)) == 0)
 	{
-		prnlog("    Bitstream test 1 ok");
+		PrintAndLogDevice(SUCCESS, "    Bitstream test 1 ok");
 	}else
 	{
-		prnlog("    Bitstream test 1 failed");
+		PrintAndLogDevice(FAILED, "    Bitstream test 1 failed");
 		uint8_t i;
 		for(i = 0 ; i < sizeof(input) ; i++)
 		{
-			prnlog("    IN %02x, OUT %02x", input[i], output[i]);
+			PrintAndLogDevice(NORMAL, "    IN %02x, OUT %02x", input[i], output[i]);
 		}
 		return 1;
 	}
@@ -265,14 +249,14 @@ int testReversedBitstream()
 	}
 	if(memcmp(input, output, sizeof(input)) == 0)
 	{
-		prnlog("    Bitstream test 2 ok");
+		PrintAndLogDevice(SUCCESS, "    Bitstream test 2 ok");
 	}else
 	{
-		prnlog("    Bitstream test 2 failed");
+		PrintAndLogDevice(FAILED, "    Bitstream test 2 failed");
 		uint8_t i;
 		for(i = 0 ; i < sizeof(input) ; i++)
 		{
-			prnlog("    IN %02x, MIDDLE: %02x, OUT %02x", input[i],reverse[i], output[i]);
+			PrintAndLogDevice(NORMAL, "    IN %02x, MIDDLE: %02x, OUT %02x", input[i],reverse[i], output[i]);
 		}
 		return 1;
 	}
@@ -282,7 +266,7 @@ int testReversedBitstream()
 
 int testCipherUtils(void)
 {
-	prnlog("[+] Testing some internals...");
+	PrintAndLogDevice(INFO, "Testing some internals...");
 	int retval = 0;
 	retval |= testBitStream();
 	retval |= testReversedBitstream();

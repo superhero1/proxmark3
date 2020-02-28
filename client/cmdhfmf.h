@@ -18,18 +18,17 @@
 #include <time.h>
 #include "proxmark3.h"
 #include "iso14443crc.h"
-#include "data.h"
 #include "ui.h"
 #include "cmdparser.h"
 #include "common.h"
 #include "util.h"
-#include "mifare.h" // nonces_t struct
-#include "mfkey.h"  // mfkey32_moebious
+#include "mifare.h" 		// nonces_t struct
+#include "mfkey.h"  		// mfkey32_moebious
 #include "cmdhfmfhard.h"
-#include "mifarehost.h"
-#include "util_posix.h" // msclock
+#include "mifarehost.h"		// icesector_t,  sector_t
+#include "util_posix.h"		// msclock
 #include "mifaredefault.h"  // mifare default key array
-#include "cmdhf14a.h" // dropfield
+#include "cmdhf14a.h" 		// dropfield
 
 extern int CmdHFMF(const char *Cmd);
 
@@ -43,10 +42,10 @@ extern int CmdHF14AMfRestore(const char* cmd);
 extern int CmdHF14AMfWrBl(const char* cmd);
 extern int CmdHF14AMfUWrBl(const char* cmd);
 extern int CmdHF14AMfChk(const char* cmd);
-extern int CmdHF14AMifare(const char* cmd);
+extern int CmdHF14ADarkside(const char* cmd);
 extern int CmdHF14AMfNested(const char* cmd);
 extern int CmdHF14AMfNestedHard(const char *Cmd);
-extern int CmdHF14AMfSniff(const char* cmd);
+//extern int CmdHF14AMfSniff(const char* cmd);
 extern int CmdHF14AMf1kSim(const char* cmd);
 extern int CmdHF14AMfKeyBrute(const char *Cmd);
 extern int CmdHF14AMfEClear(const char* cmd);

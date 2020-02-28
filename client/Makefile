@@ -4,6 +4,11 @@
 # the license.
 #-----------------------------------------------------------------------------
 
+# reveng will compile without macros, but these may be useful:
+# Add -DBMPMACRO to use bitmap size constant macros (edit config.h)
+# Add -DNOFORCE  to disable the -F switch
+# Add -DPRESETS  to compile with preset models (edit config.h)
+
 CC = gcc
 CXX = g++
 LD = g++
@@ -22,7 +27,7 @@ LDLIBS = -L/opt/local/lib -L/usr/local/lib -lreadline -lpthread -lm
 LUALIB = ../liblua/liblua.a
 LDFLAGS = $(ENV_LDFLAGS)
 INCLUDES_CLIENT = -I. -I../include -I../common -I../common/polarssl -I../zlib -I../uart -I/opt/local/include -I../liblua
-CFLAGS = $(ENV_CFLAGS) -std=c99 -D_ISOC99_SOURCE $(INCLUDES_CLIENT) -Wall -g -O3
+CFLAGS = $(ENV_CFLAGS) -std=c99 -D_ISOC99_SOURCE -DPRESETS $(INCLUDES_CLIENT) -Wall -g -O3
 CXXFLAGS = -I../include -Wall -O3
 
 LUAPLATFORM = generic
@@ -76,6 +81,9 @@ else
     QTGUIOBJS = $(OBJDIR)/guidummy.o
 endif
 
+# RDV40 flag enables flashmemory commands in client.  comment out if you don't have rdv40
+CFLAGS += -DWITH_FLASH -DWITH_SMARTCARD
+
 # Flags to generate temporary dependency files
 DEPFLAGS = -MT $@ -MMD -MP -MF $(OBJDIR)/$*.Td
 # make temporary to final dependeny files after successful compilation
@@ -98,6 +106,7 @@ CMDSRCS =	crapto1/crapto1.c \
 			polarssl/rsa.c \
 			polarssl/sha1.c \
 			polarssl/sha256.c \
+			polarssl/base64.c \
 			loclass/cipher.c \
 			loclass/cipherutils.c \
 			loclass/ikeys.c \
@@ -110,11 +119,9 @@ CMDSRCS =	crapto1/crapto1.c \
 			crc.c \
 			crc16.c \
 			crc64.c \
-			iso14443crc.c \
 			legic_prng.c \
 			iso15693tools.c \
 			prng.c \
-			data.c \
 			graph.c \
 			cmddata.c \
 			lfdemod.c \
@@ -137,6 +144,7 @@ CMDSRCS =	crapto1/crapto1.c \
 			emv/cmdemv.c \
 			cmdanalyse.c \
 			cmdhf.c \
+			cmdhflist.c \
 			cmdhf14a.c \
 			cmdhf14b.c \
 			cmdhf15.c \
@@ -175,6 +183,9 @@ CMDSRCS =	crapto1/crapto1.c \
 			cmdlfti.c \
 			cmdlfviking.c \
 			cmdlfvisa2000.c \
+			cmdtrace.c \
+			cmdflashmem.c \
+			cmdsmartcard.c \
 			cmdparser.c \
 			cmdmain.c \
 			pm3_binlib.c \
@@ -191,7 +202,6 @@ CMDSRCS =	crapto1/crapto1.c \
 			reveng/poly.c \
 			reveng/getopt.c \
 			bucketsort.c
-#			radixsort.c \
 
 cpu_arch = $(shell uname -m)
 ifneq ($(findstring 86, $(cpu_arch)), )
@@ -223,7 +233,7 @@ SUPPORTS_AVX512 :=  $(shell echo | gcc -E -mavx512f - > /dev/null 2>&1 && echo "
 
 HARD_SWITCH_NOSIMD = -mno-mmx -mno-sse2 -mno-avx -mno-avx2
 HARD_SWITCH_MMX = -mmmx -mno-sse2 -mno-avx -mno-avx2
-HARD_SWITCH_SSE2 = -mmmx -msse2 -mno-avx -mno-avx2 -mstackrealign
+HARD_SWITCH_SSE2 = -mmmx -msse2 -mno-avx -mno-avx2
 HARD_SWITCH_AVX = -mmmx -msse2 -mavx -mno-avx2
 HARD_SWITCH_AVX2 = -mmmx -msse2 -mavx -mavx2
 HARD_SWITCH_AVX512 = -mmmx -msse2 -mavx -mavx2 -mavx512f
@@ -235,7 +245,7 @@ ifeq "$(SUPPORTS_AVX512)" "True"
 	HARD_SWITCH_AVX2 += -mno-avx512f
 	MULTIARCHOBJS +=  $(MULTIARCHSRCS:%.c=$(OBJDIR)/%_AVX512.o)
 endif
-			
+
 BINS = proxmark3 flasher fpga_compress
 WINBINS = $(patsubst %, %.exe, $(BINS))
 CLEAN = $(BINS) $(WINBINS) $(COREOBJS) $(CMDOBJS) $(ZLIBOBJS) $(QTGUIOBJS) $(MULTIARCHOBJS) $(OBJDIR)/*.o *.moc.cpp ui/ui_overlays.h lualibs/usb_cmd.lua lualibs/mf_default_keys.lua
@@ -248,7 +258,7 @@ all-static: proxmark3 flasher fpga_compress
 
 proxmark3: LDLIBS+=$(LUALIB) $(QTLDLIBS)
 proxmark3: $(OBJDIR)/proxmark3.o $(COREOBJS) $(CMDOBJS) $(QTGUIOBJS) $(MULTIARCHOBJS) $(ZLIBOBJS) lualibs/usb_cmd.lua lualibs/mf_default_keys.lua
-	$(LD) $(LDFLAGS) $(OBJDIR)/proxmark3.o $(COREOBJS) $(CMDOBJS) $(QTGUIOBJS) $(MULTIARCHOBJS) $(ZLIBOBJS) $(LDLIBS) -o $@
+	$(LD) $(LDFLAGS) $(OBJDIR)/proxmark3.o $(COREOBJS) $(CMDOBJS) $(QTGUIOBJS) $(MULTIARCHOBJS) $(ZLIBOBJS) $(LDLIBS)  -o $@
 	
 flasher: $(OBJDIR)/flash.o $(OBJDIR)/flasher.o $(COREOBJS)
 	$(LD) $(LDFLAGS) $^ $(LDLIBS) -o $@
@@ -313,7 +323,6 @@ $(OBJDIR)/%.o : %.c $(OBJDIR)/%.d
 $(OBJDIR)/%.o : %.cpp $(OBJDIR)/%.d
 	$(CXX) $(DEPFLAGS) $(CXXFLAGS) $(QTINCLUDES) -c -o $@ $<
 	$(POSTCOMPILE)
-
 
 #$(CMDOBJS) $(COREOBJS): $(notdir $(%.c)) %.d
 #	$(CC) $(DEPFLAGS) $(CFLAGS) -c -o $@ $<

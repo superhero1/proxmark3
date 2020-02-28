@@ -52,6 +52,7 @@ end
 -- Usage help
 local function help()
 	print(copyright)
+	print(author)	
 	print(version)	
 	print(desc)
 	print("Example usage")
@@ -107,7 +108,7 @@ local function findEntryByUid( uid )
 
 	-- xor UID4,UID5,UID6,UID7
 	-- mod 0x20 (dec 32)
-	local pos = (bxor(bxor(bxor(uid[4],uid[5]), uid[6]),uid[7])) % 32
+	local pos = (bxor(uid[4], uid[5], uid[6], uid[7])) % 32
 
 	-- convert to hexstring
 	pos = string.format('%02X', pos)
@@ -131,9 +132,9 @@ local function pwdgen(uid)
     local entry = findEntryByUid(uidbytes)
 	if entry == nil then return nil, "Can't find a xor entry" end
 
-    local pwd0 = bxor( bxor( bxor( entry[1], uidbytes[2]), uidbytes[3]), uidbytes[4])
-	local pwd1 = bxor( bxor( bxor( entry[2], uidbytes[1]), uidbytes[3]), uidbytes[5])
-	local pwd2 = bxor( bxor( bxor( entry[3], uidbytes[1]), uidbytes[2]), uidbytes[6])
+    local pwd0 = bxor( entry[1], uidbytes[2], uidbytes[3], uidbytes[4])
+	local pwd1 = bxor( entry[2], uidbytes[1], uidbytes[3], uidbytes[5])
+	local pwd2 = bxor( entry[3], uidbytes[1], uidbytes[2], uidbytes[6])
 	local pwd3 = bxor( entry[4], uidbytes[7])
 	return string.format('%02X%02X%02X%02X', pwd0, pwd1, pwd2, pwd3)
 end
@@ -161,7 +162,7 @@ local function main(args)
 		if #uid ~= 14 then return oops('uid wrong length. Should be 7 hex bytes') end
 	else
 		-- GET TAG UID	
-		local tag, err = lib14a.read1443a(false, true)
+		local tag, err = lib14a.read(false, true)
 		if not tag then return oops(err) end
 		core.clearCommandBuffer()
 		uid = tag.uid	

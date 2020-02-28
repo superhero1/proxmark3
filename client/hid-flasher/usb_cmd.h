@@ -55,7 +55,15 @@ typedef struct {
 
 #define CMD_DOWNLOAD_EML_BIGBUF											  0x0110
 #define CMD_DOWNLOADED_EML_BIGBUF										  0x0111
- 
+
+// RDV40, Flash memory operations
+#define CMD_READ_FLASH_MEM												  0x0120
+#define CMD_WRITE_FLASH_MEM												  0x0121
+#define CMD_WIPE_FLASH_MEM												  0x0122
+#define CMD_DOWNLOAND_FLASH_MEM											  0x0123
+#define CMD_DOWNLOADED_FLASHMEM											  0x0124
+#define CMD_INFO_FLASH_MEM												  0x0125
+
 // For low-frequency tags
 #define CMD_READ_TI_TYPE                                                  0x0202
 #define CMD_WRITE_TI_TYPE                                                 0x0203
@@ -110,7 +118,6 @@ typedef struct {
 #define CMD_ISO_15693_COMMAND                                             0x0313
 #define CMD_ISO_15693_COMMAND_DONE                                        0x0314
 #define CMD_ISO_15693_FIND_AFI                                            0x0315
-#define CMD_ISO_15693_DEBUG                                               0x0316
 #define CMD_LF_SNOOP_RAW_ADC_SAMPLES                                      0x0317
 
 // For Hitag2 transponders
@@ -125,6 +132,7 @@ typedef struct {
 #define CMD_WR_HITAG_S													  0x0375
 #define CMD_EMU_HITAG_S													  0x0376
 
+#define CMD_ANTIFUZZ_ISO_14443a											  0x0380
 #define CMD_SIMULATE_TAG_ISO_14443B                                       0x0381
 #define CMD_SNOOP_ISO_14443B                                              0x0382
 #define CMD_SNOOP_ISO_14443a                                              0x0383

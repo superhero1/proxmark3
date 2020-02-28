@@ -506,10 +506,19 @@ function tagToBytes(tag)
 function readFromPM3()
   local tag, bytes, infile
     infile="legic.temp"
-    core.console("hf legic reader")
-    core.console("hf legic esave "..infile)
+    -- core.console("hf legic reader")
+    -- core.console("hf legic esave "..infile)
+    core.console("hf legic dump o "..infile)
     tag=readFile(infile..".bin")
     return tag
+end
+
+function padString(str)
+  if (str:len() == 1) then
+    return '0'..str
+  end
+
+  return str
 end
 
 ---
@@ -558,32 +567,33 @@ function writeToTag(tag)
   if (bytes) then
     print("write temp-file '"..filename.."'")
     print(accyan)
-    writeFile(bytes, filename)
-    --writeToTag(bytes, taglen, 'MylegicClone.hex')
+    writeFile(bytes, filename..".bin")
     print(acoff)
   end
  end
+
 	-- write data to file
 	if (taglen > 0) then
 		WriteBytes = utils.input(acyellow.."enter number of bytes to write?"..acoff, taglen)
 		-- load file into pm3-buffer
     if (type(filename) ~= "string") then filename=input(acyellow.."filename to load to pm3-buffer?"..acoff,"legic.temp") end
-		cmd = 'hf legic load '..filename
+		cmd = 'hf legic eload 2 '..filename
 		core.console(cmd)
 		-- write pm3-buffer to Tag
 		for i=0, WriteBytes do
-			if ( i<5 or i>6) then
-				cmd = ('hf legic write o 0x%02x d 0x01'):format(i)
-				core.console(cmd)
-        --print(cmd)
-			elseif (i == 6) then
-				-- write DCF in reverse order (requires 'mosci-patch')
-				cmd = 'hf legic write o 0x05 d 0x02'
+			if (i > 6) then
+        cmd = 'hf legic write o '..string.format("%x", i)..' d '..padString(bytes[i])
         print(acgreen..cmd..acoff)
 				core.console(cmd)
-        --print(cmd)
-			else
+			elseif (i == 6) then
+				-- write DCF in reverse order (requires 'mosci-patch')
+				cmd = 'hf legic write o 05 d '..padString(bytes[i-1])..padString(bytes[i])
+        print(acgreen..cmd..acoff)
+				core.console(cmd)
+      elseif (i == 5) then
 				print(acgreen.."skip byte 0x05 - will be written next step"..acoff)
+			else
+				print(acgreen.."skip byte 0x00-0x04 - unwritable area"..acoff)
 			end
 			utils.Sleep(0.2)
 		end
@@ -620,14 +630,14 @@ end
 function writeFile(bytes, filename)
 	if (filename ~= 'MylegicClone.hex') then
 		if (file_check(filename)) then
-			local answer = confirm("\nthe output-file "..filename.." alredy exists!\nthis will delete the previous content!\ncontinue?")
+			local answer = confirm("\nthe output-file "..filename.." already exists!\nthis will delete the previous content!\ncontinue?")
 			if (answer==false) then return print("user abort") end
 		end
 	end
 	local line
 	local bcnt=0
 	local fho,err = io.open(filename, "w")
-	if err then oops("OOps ... faild to open output-file ".. filename) end
+	if err then oops("OOps ... failed to open output-file ".. filename) end
 	bytes=xorBytes(bytes, bytes[5])
 	for i = 1, #bytes do
 		if (bcnt == 0) then

@@ -157,8 +157,7 @@ ProxWidget::ProxWidget(QWidget *parent, ProxGuiQT *master) : QWidget(parent) {
 	this->master = master;
 	resize(800,500);
 
-	/** Setup the controller widget **/
-
+	// Setup the controller widget
 	controlWidget = new QWidget();
 	opsController = new Ui::Form();
 	opsController->setupUi(controlWidget);
@@ -180,23 +179,17 @@ ProxWidget::ProxWidget(QWidget *parent, ProxGuiQT *master) : QWidget(parent) {
 	QObject::connect(opsController->horizontalSlider_dirthr_down, SIGNAL(valueChanged(int)), this, SLOT(vchange_dthr_down(int)));
 	QObject::connect(opsController->horizontalSlider_askedge, SIGNAL(valueChanged(int)), this, SLOT(vchange_askedge(int)));
 
-	controlWidget->show();
-
 	// Set up the plot widget, which does the actual plotting
-
 	plot = new Plot(this);
-	/*
-	QSlider* slider = new QSlider(Qt::Horizontal);
-	slider->setFocusPolicy(Qt::StrongFocus);
-	slider->setTickPosition(QSlider::TicksBothSides);
-	slider->setTickInterval(10);
-	slider->setSingleStep(1);
-	*/
 	QVBoxLayout *layout = new QVBoxLayout;
-	//layout->addWidget(slider);
 	layout->addWidget(plot);
 	setLayout(layout);
-	//printf("Proxwidget Constructor just set layout\r\n");
+	show(); // places the window on the screen.
+
+	// Move controller widget below plot
+	controlWidget->move(x(),y()+frameSize().height());
+	controlWidget->resize(size().width(), controlWidget->size().height());
+	controlWidget->show();
 }
 
 // not 100% sure what i need in this block
@@ -236,11 +229,12 @@ void ProxWidget::showEvent(QShowEvent *event) {
 //----------- Plotting
 
 int Plot::xCoordOf(int i, QRect r ) {
-	return r.left() + (int)((i - GraphStart)*GraphPixelsPerPoint);
+	return r.left() + (int)((i - GraphStart) * GraphPixelsPerPoint);
 }
 
 int Plot::yCoordOf(int v, QRect r, int maxVal) {
-	int z = (r.bottom() - r.top())/2;
+	int z = (r.bottom() - r.top()) / 2;	
+	if ( maxVal == 0 ) ++maxVal;
 	return -(z * v) / maxVal + z;
 }
 
@@ -268,26 +262,26 @@ void Plot::setMaxAndStart(int *buffer, int len, QRect plotRect)
 {
 	if (len == 0) return;
 	startMax = (len - (int)((plotRect.right() - plotRect.left() - 40) / GraphPixelsPerPoint));
-	if(startMax < 0) {
+	if (startMax < 0) {
 		startMax = 0;
 	}
-	if(GraphStart > startMax) {
+	if (GraphStart > startMax) {
 		GraphStart = startMax;
 	}
 	if (GraphStart > len) return;
 	int vMin = INT_MAX, vMax = INT_MIN, v = 0;
 	int sample_index = GraphStart ;
-	for( ; sample_index < len && xCoordOf(sample_index,plotRect) < plotRect.right() ; sample_index++) {
+	for ( ; sample_index < len && xCoordOf(sample_index,plotRect) < plotRect.right() ; sample_index++) {
 
 		v = buffer[sample_index];
-		if(v < vMin) vMin = v;
-		if(v > vMax) vMax = v;
+		if (v < vMin) vMin = v;
+		if (v > vMax) vMax = v;
 	}
 
 	g_absVMax = 0;
-	if(fabs( (double) vMin) > g_absVMax) g_absVMax = (int)fabs( (double) vMin);
-	if(fabs( (double) vMax) > g_absVMax) g_absVMax = (int)fabs( (double) vMax);
-	g_absVMax = (int)(g_absVMax*1.25 + 1);
+	if (fabs( (double) vMin) > g_absVMax) g_absVMax = (int)fabs( (double) vMin);
+	if (fabs( (double) vMax) > g_absVMax) g_absVMax = (int)fabs( (double) vMax);
+	g_absVMax = (int)(g_absVMax * 1.25 + 1);
 }
 
 void Plot::PlotDemod(uint8_t *buffer, size_t len, QRect plotRect, QRect annotationRect, QPainter *painter, int graphNum, int plotOffset)
@@ -352,7 +346,7 @@ void Plot::PlotGraph(int *buffer, int len, QRect plotRect, QRect annotationRect,
 	QPainterPath penPath;
 	int vMin = INT_MAX, vMax = INT_MIN, vMean = 0, v = 0, i = 0;
 	int x = xCoordOf(GraphStart, plotRect);
-	int y = yCoordOf(buffer[GraphStart],plotRect,g_absVMax);
+	int y = yCoordOf(buffer[GraphStart], plotRect, g_absVMax);
 	penPath.moveTo(x, y);
 	for(i = GraphStart; i < len && xCoordOf(i, plotRect) < plotRect.right(); i++) {
 
@@ -363,13 +357,13 @@ void Plot::PlotGraph(int *buffer, int len, QRect plotRect, QRect annotationRect,
 
 		penPath.lineTo(x, y);
 
-		if(GraphPixelsPerPoint > 10) {
+		if (GraphPixelsPerPoint > 10) {
 			QRect f(QPoint(x - 3, y - 3),QPoint(x + 3, y + 3));
 			painter->fillRect(f, QColor(100, 255, 100));
 		}
 		// catch stats
-		if(v < vMin) vMin = v;
-		if(v > vMax) vMax = v;
+		if (v < vMin) vMin = v;
+		if (v > vMax) vMax = v;
 		vMean += v;
 	}
 	vMean /= (i - GraphStart);
@@ -377,7 +371,7 @@ void Plot::PlotGraph(int *buffer, int len, QRect plotRect, QRect annotationRect,
 	painter->setPen(getColor(graphNum));
 
 	// Draw y-axis
-	int xo = 5+(graphNum*40);
+	int xo = 5 + (graphNum * 40);
 	painter->drawLine(xo, plotRect.top(),xo, plotRect.bottom());
 
 	int vMarkers = (g_absVMax - (g_absVMax % 10)) / 5;
@@ -388,20 +382,19 @@ void Plot::PlotGraph(int *buffer, int len, QRect plotRect, QRect annotationRect,
 	int n = 0;
 	int lasty0 = 65535;
 
-	for(v = vMarkers; yCoordOf(v,plotRect,g_absVMax) > plotRect.top() && n < 20; v+= vMarkers ,n++)
-	{
-		int y0 = yCoordOf(v,plotRect,g_absVMax);
-		int y1 = yCoordOf(-v,plotRect,g_absVMax);
+	for (v = vMarkers; yCoordOf(v, plotRect, g_absVMax) > plotRect.top() && n < 20; v+= vMarkers ,n++) {
+		int y0 = yCoordOf(v, plotRect, g_absVMax);
+		int y1 = yCoordOf(-v, plotRect, g_absVMax);
 
 		if(lasty0 - y0 < minYDist) continue;
 
 		painter->drawLine(xo-5,y0, xo+5, y0);
 
 		sprintf(yLbl, "%d", v);
-		painter->drawText(xo+8,y0+7,yLbl);
+		painter->drawText(xo+8, y0+7, yLbl);
 
 		painter->drawLine(xo-5, y1, xo+5, y1);
-		sprintf(yLbl, "%d",-v);
+		sprintf(yLbl, "%d", -v);
 		painter->drawText(xo+8, y1+5 , yLbl);
 		lasty0 = y0;
 	}
@@ -418,9 +411,11 @@ void Plot::PlotGraph(int *buffer, int len, QRect plotRect, QRect annotationRect,
 	//printf("Plot time %f\n", elapsed_secs);
 }
 
-void Plot::plotGridLines(QPainter* painter,QRect r) {
+void Plot::plotGridLines(QPainter* painter, QRect r) {
+		
 	// set GridOffset
 	if (PlotGridX <= 0) return;
+	
 	int offset = GridOffset;
 	if (GridLocked && PlotGridX) {
 		offset = GridOffset + PlotGridX - (GraphStart % PlotGridX);
@@ -433,15 +428,19 @@ void Plot::plotGridLines(QPainter* painter,QRect r) {
 	int i;
 	int grid_delta_x = (int) (PlotGridX * GraphPixelsPerPoint);
 	int grid_delta_y = PlotGridY;
+
 	if ((PlotGridX > 0) && ((PlotGridX * GraphPixelsPerPoint) > 1)) {
-		for(i = (offset * GraphPixelsPerPoint); i < r.right(); i += grid_delta_x) {
+		for (i = (offset * GraphPixelsPerPoint); i < r.right(); i += grid_delta_x) {
 			painter->drawLine(r.left()+i, r.top(), r.left()+i, r.bottom());
 		} 
 	}
+	
 	if (PlotGridY > 0) {
-		for(i = 0; yCoordOf(i,r,g_absVMax) > r.top(); i += grid_delta_y) {
-			painter->drawLine( r.left(), yCoordOf(i,r,g_absVMax), r.right(), yCoordOf(i,r,g_absVMax) );
-			painter->drawLine( r.left(), yCoordOf(i*-1,r,g_absVMax), r.right(), yCoordOf(i*-1,r,g_absVMax) );
+		for (i = 0; yCoordOf(i, r, g_absVMax) > r.top(); i += grid_delta_y) {
+			// line above mid
+			painter->drawLine( r.left(), yCoordOf(i, r, g_absVMax), r.right(), yCoordOf(i, r, g_absVMax) );
+			// line below mid
+			painter->drawLine( r.left(), yCoordOf(-i, r, g_absVMax), r.right(), yCoordOf(-i, r, g_absVMax) );
 		}
 	}
 }
@@ -551,6 +550,8 @@ Plot::Plot(QWidget *parent) : QWidget(parent), GraphStart(0), GraphPixelsPerPoin
 	CursorBPos = 0;
 
 	setWindowTitle(tr("Sliders"));
+	
+	master = parent;
 }
 
 void Plot::closeEvent(QCloseEvent *event)
@@ -566,7 +567,7 @@ void Plot::mouseMoveEvent(QMouseEvent *event)
 	x -= WIDTH_AXES;
 	x = (int)(x / GraphPixelsPerPoint);
 	x += GraphStart;
-	if((event->buttons() & Qt::LeftButton)) {
+	if ((event->buttons() & Qt::LeftButton)) {
 		CursorAPos = x;
 	} else if (event->buttons() & Qt::RightButton) {
 		CursorBPos = x;
@@ -578,32 +579,33 @@ void Plot::keyPressEvent(QKeyEvent *event)
 {
 	int	offset;
 
-	if(event->modifiers() & Qt::ShiftModifier) {
+	if (event->modifiers() & Qt::ShiftModifier) {
 		if (PlotGridX)
-			offset= PageWidth - (PageWidth % PlotGridX);
+			offset = PageWidth - (PageWidth % PlotGridX);
 		else
-			offset= PageWidth;
-	} else 
-		if(event->modifiers() & Qt::ControlModifier)
-			offset= 1;
+			offset = PageWidth;
+	} else {
+		if (event->modifiers() & Qt::ControlModifier)
+			offset = 1;
 		else
-			offset= (int)(20 / GraphPixelsPerPoint);
-
+			offset = (int)(20 / GraphPixelsPerPoint);
+	}
+	
 	switch(event->key()) {
 		case Qt::Key_Down:
-			if(GraphPixelsPerPoint <= 50) {
+			if (GraphPixelsPerPoint <= 50) {
 				GraphPixelsPerPoint *= 2;
 			}
 			break;
 
 		case Qt::Key_Up:
-			if(GraphPixelsPerPoint >= 0.02) {
+			if (GraphPixelsPerPoint >= 0.02) {
 				GraphPixelsPerPoint /= 2;
 			}
 			break;
 
 		case Qt::Key_Right:
-			if(GraphPixelsPerPoint < 20) {
+			if (GraphPixelsPerPoint < 20) {
 				GraphStart += offset;
 			} else {
 				GraphStart++;
@@ -611,42 +613,49 @@ void Plot::keyPressEvent(QKeyEvent *event)
 			break;
 
 		case Qt::Key_Left:
-			if(GraphPixelsPerPoint < 20) {
+			if (GraphPixelsPerPoint < 20) {
 				GraphStart -= offset;
 			} else {
 				GraphStart--;
 			}
 			break;
 
-		case Qt::Key_G:
-			if(PlotGridX || PlotGridY) {
-				PlotGridX= 0;
-				PlotGridY= 0;
+		case Qt::Key_G:		
+			if (PlotGridX || PlotGridY) {
+				PlotGridX = 0;
+				PlotGridY = 0;
 			} else {
-				PlotGridX= PlotGridXdefault;
-				PlotGridY= PlotGridYdefault;
+				if ( PlotGridXdefault < 0  )
+					PlotGridXdefault = 64;
+				if ( PlotGridYdefault < 0 )
+					PlotGridYdefault = 0;
+				
+				PlotGridX = PlotGridXdefault;
+				PlotGridY = PlotGridYdefault;
 			}
 			break;
 
 		case Qt::Key_H:
-			puts("Plot Window Keystrokes:\n");
-			puts(" Key                      Action\n");
-			puts(" DOWN                     Zoom in");
-			puts(" G                        Toggle grid display");
-			puts(" H                        Show help");
-			puts(" L                        Toggle lock grid relative to samples");
-			puts(" LEFT                     Move left");
-			puts(" <CTL>LEFT                Move left 1 sample");
-			puts(" <SHIFT>LEFT              Page left");
-			puts(" LEFT-MOUSE-CLICK         Set yellow cursor");
-			puts(" Q                        Hide window");
-			puts(" RIGHT                    Move right");
-			puts(" <CTL>RIGHT               Move right 1 sample");
-			puts(" <SHIFT>RIGHT             Page right");
-			puts(" RIGHT-MOUSE-CLICK        Set purple cursor");
-			puts(" UP                       Zoom out");
-			puts("");
-			puts("Use client window 'data help' for more plot commands\n");
+
+			puts("\n-----------------------------------------------------------------------");
+			puts("PLOT window keystrokes");
+			puts("\tKey                      Action");
+			puts("-----------------------------------------------------------------------");
+			puts("\tUP                       Zoom out");
+			puts("\tDOWN                     Zoom in");
+			puts("\tG                        Toggle grid display");
+			puts("\tH                        Show help");
+			puts("\tL                        Toggle lock grid relative to samples");
+			puts("\tQ                        Hide window");
+			puts("\tLEFT                     Move left");
+			puts("\t<CTLR> LEFT              Move left 1 sample");	
+			puts("\t<SHIFT> LEFT             Page left");
+			puts("\tLEFT MOUSE CLICK         Set yellow cursor");
+			puts("\tRIGHT                    Move right");
+			puts("\t<CTLR> RIGHT             Move right 1 sample");
+			puts("\t<SHIFT> RIGHT            Page right");
+			puts("\tRIGHT MOUSE CLICK        Set purple cursor");
+			puts("-----------------------------------------------------------------------");
 			break;
 
 		case Qt::Key_L:
@@ -658,7 +667,7 @@ void Plot::keyPressEvent(QKeyEvent *event)
 			break;
 
 		case Qt::Key_Q:
-			this->hide();
+			master->hide();
 			break;
 
 		default:

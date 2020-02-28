@@ -23,8 +23,8 @@
 #include "cmdparser.h"
 #include "cmdmain.h"
 #include "iso14443crc.h"
-#include "data.h"
 #include "cmdhf.h"		// list cmd
+#include "mifare.h" 	// felica_card_select_t struct
 
 extern int CmdHFFelica(const char *Cmd);
 extern int CmdHFFelicaList(const char *Cmd);

@@ -71,20 +71,24 @@ static int l_GetFromBigBuf(lua_State *L){
         startindex = luaL_checknumber(L, 2);
     }
 
-	uint8_t *data = malloc(len);
-	if ( data == NULL ) {
+	uint8_t *data = calloc(len, sizeof(uint8_t));
+	if ( !data ) {
         //signal error by returning Nil, errorstring
         lua_pushnil(L);
         lua_pushstring(L,"Allocating memory failed");
         return 2; // two return values
 	}
 		
-	GetFromBigBuf(data, len, startindex);	
-	WaitForResponse(CMD_ACK, NULL);
+	if ( !GetFromDevice(BIG_BUF, data, len, startindex, NULL, 2500, false)) {
+		free(data);
+		lua_pushnil(L);
+        lua_pushstring(L,"command execution time out");		
+		return 2;
+	}
+	
 	//Push it as a string
 	lua_pushlstring(L,(const char *)data, len);
-	if (data) 
-		free(data);
+	free(data);
 	return 1;// return 1 to signal one return value
 }
 /**
@@ -227,21 +231,14 @@ static int l_CmdConsole(lua_State *L) {
 }
 
 static int l_iso15693_crc(lua_State *L) {
-    //    uint16_t Iso15693Crc(uint8_t *v, int n);
     size_t size;
     const char *v = luaL_checklstring(L, 1, &size);
 	// iceman, should be size / 2 ?!?
-    uint16_t retval = Iso15693Crc((uint8_t *) v, size);
-    lua_pushunsigned(L, retval);
+    lua_pushunsigned(L, crc( CRC_15693, (uint8_t *) v, size));
     return 1;
 }
 
 static int l_iso14443b_crc(lua_State *L) {
-	/* void ComputeCrc14443(int CrcType,
-                     const unsigned char *Data, int Length,
-                     unsigned char *TransmitFirst,
-                     unsigned char *TransmitSecond)
-	*/
 	uint32_t tmp;
 	unsigned char buf[USB_CMD_DATA_SIZE] = {0x00};
     size_t size = 0;	
@@ -253,7 +250,7 @@ static int l_iso14443b_crc(lua_State *L) {
 	}
 	
 	size /= 2;	
-	ComputeCrc14443(CRC_14443_B, buf, size, &buf[size], &buf[size+1]);	
+	compute_crc(CRC_14443_B, buf, size, &buf[size], &buf[size+1]);	
     lua_pushlstring(L, (const char *)&buf, size+2);
     return 1;
 }
@@ -397,8 +394,8 @@ static int l_crc16(lua_State *L) {
 	size_t size;
 	const char *p_str = luaL_checklstring(L, 1, &size);
 
-	uint16_t retval = crc16_ccitt( (uint8_t*) p_str, size);
-    lua_pushunsigned(L, retval);
+	uint16_t checksum = crc(CRC_CCITT,  (uint8_t*) p_str, size);
+    lua_pushunsigned(L, checksum);
     return 1;
 }
 
@@ -459,21 +456,23 @@ static int l_sha1(lua_State *L) {
 
 static int l_reveng_models(lua_State *L){
 
-	// This array needs to be adjusted if RevEng adds more crc-models.
-	char *models[100];
+// This array needs to be adjusted if RevEng adds more crc-models.
+#define NMODELS 103
+
 	int count = 0;
-	int in_width = luaL_checkinteger(L, 1);
-	
+	uint8_t in_width = luaL_checkunsigned(L, 1);
 	if ( in_width > 89 ) return returnToLuaWithError(L,"Width cannot exceed 89, got %d", in_width);
 
-	// This array needs to be adjusted if RevEng adds more crc-models.
-	uint8_t width[100];
-	width[0] = (uint8_t)in_width;
-	int ans = GetModels(models, &count, width);
-	if (!ans) return 0;
+	uint8_t width[NMODELS];
+	memset(width, 0, sizeof(width));
+	char *models[NMODELS];
+
+	width[0] = in_width;
 	
-	lua_newtable(L);
+	if (!GetModels(models, &count, width))
+		return returnToLuaWithError(L, "didn't find any models");
 	
+	lua_newtable(L);	
 	for (int i = 0; i < count; i++){
 		lua_pushstring(L,  (const char*)models[i]);
 		lua_rawseti(L,-2,i+1);
@@ -504,8 +503,6 @@ static int l_reveng_RunModel(lua_State *L){
     bool reverse =  lua_toboolean(L, 3);
 	const char endian = luaL_checkstring(L, 4)[0];
 
-	//PrintAndLog("mod: %s, hex: %s, rev %d", inModel, inHexStr, reverse);
-	//    int RunModel(char *inModel, char *inHexStr, bool reverse, char endian, char *result)
 	int ans = RunModel( (char *)inModel, (char *)inHexStr, reverse, endian, result);
 	if (!ans) 	
 		return returnToLuaWithError(L,"Reveng failed");
@@ -550,11 +547,15 @@ static int l_hardnested(lua_State *L){
 	const char *p_tests = luaL_checklstring(L, 10, &size);
     if(size != 1)  return returnToLuaWithError(L,"Wrong size of tests, got %d bytes, expected 1", (int) size);
 	
+	char filename[FILE_PATH_SIZE]="nonces.bin";
+	const char *p_filename = luaL_checklstring(L, 11, &size);
+	if(size != 0)
+		strcpy(filename, p_filename);
+
 	uint32_t blockNo = 0, keyType = 0;
 	uint32_t trgBlockNo = 0, trgKeyType = 0;
 	uint32_t slow = 0, tests = 0;
 	uint32_t nonce_file_read = 0, nonce_file_write = 0;
-	
     sscanf(p_blockno, "%02x", &blockNo);
 	sscanf(p_keytype, "%x", &keyType);
     sscanf(p_trg_blockno, "%02x", &trgBlockNo);
@@ -577,7 +578,7 @@ static int l_hardnested(lua_State *L){
 	}
 	
     uint64_t foundkey = 0;
-	int retval = mfnestedhard(blockNo, keyType, key, trgBlockNo, trgKeyType, haveTarget ? trgkey : NULL, nonce_file_read,  nonce_file_write,  slow,  tests, &foundkey);
+	int retval = mfnestedhard(blockNo, keyType, key, trgBlockNo, trgKeyType, haveTarget ? trgkey : NULL, nonce_file_read,  nonce_file_write,  slow,  tests, &foundkey, filename);
 	DropField();
 
     //Push the key onto the stack
@@ -592,11 +593,13 @@ static int l_hardnested(lua_State *L){
 
 /**
  * @brief l_validate_prng is a function to test is a nonce is using the weak PRNG
+ * detection =  1 == weak,  0 == hard ,  -1 = failed
  * @param L
  * @return
  */
 static int l_detect_prng(lua_State *L) {
-	lua_pushboolean(L, detect_classic_prng());
+	int res = detect_classic_prng();
+	lua_pushinteger(L, res);
 	return 1;
 }
 /*
@@ -638,7 +641,7 @@ int setLuaPath( lua_State* L, const char* path ) {
     lua_getfield( L, -1, "path" ); // get field "path" from table at top of stack (-1)
     const char* cur_path = lua_tostring( L, -1 ); // grab path string from top of stack
     int requiredLength = strlen(cur_path)+ strlen(path)+10; //A few bytes too many, whatever we can afford it
-    char * buf = malloc(requiredLength);
+    char * buf = calloc(requiredLength, sizeof(char));
     snprintf(buf, requiredLength, "%s;%s", cur_path, path);
     lua_pop( L, 1 ); // get rid of the string on the stack we just pushed on line 5
     lua_pushstring( L, buf ); // push the new one

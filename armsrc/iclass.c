@@ -41,14 +41,14 @@
 // Needed for CRC in emulation mode;
 // same construction as in ISO 14443;
 // different initial value (CRC_ICLASS)
-#include "iso14443crc.h"
-#include "iso15693tools.h"
+#include "crc16.h"
 #include "protocols.h"
 #include "optimized_cipher.h"
 #include "usb_cdc.h" // for usb_poll_validate_length
 
 static int timeout = 4096;
 static int SendIClassAnswer(uint8_t *resp, int respLen, uint16_t delay);
+int doIClassSimulation(int simulationMode, uint8_t *reader_mac_buf);
 
 #define MODE_SIM_CSN        0
 #define MODE_EXIT_AFTER_MAC 1
@@ -64,12 +64,13 @@ static int SendIClassAnswer(uint8_t *resp, int respLen, uint16_t delay);
 	#define ICLASS_BUFFER_SIZE 32
 #endif
 
-int doIClassSimulation(int simulationMode, uint8_t *reader_mac_buf);
+#define AddCrc(data, len)		compute_crc(CRC_ICLASS, (data), (len), (data)+(len), (data)+(len)+1)
 
 //-----------------------------------------------------------------------------
 // The software UART that receives commands from the reader, and its state
 // variables.
 //-----------------------------------------------------------------------------
+/*
 typedef struct {
     enum {
         STATE_UNSYNCD,
@@ -92,7 +93,7 @@ typedef struct {
     int     dropPosition;
     uint8_t *output;
 } tUart;
-
+*/
 typedef struct {
     enum {
         DEMOD_UNSYNCD,
@@ -111,9 +112,9 @@ typedef struct {
     int     posCount;
 	int     syncBit;
     uint16_t    shiftReg;
-	int     buffer;
-	int     buffer2;
-	int		buffer3;
+	uint32_t buffer;
+	uint32_t buffer2;
+	uint32_t buffer3;
 	int     buff;
 	int     samples;
     int     len;
@@ -126,7 +127,133 @@ typedef struct {
     uint8_t   *output;
 } tDemod;
 
+/*
+* Abrasive's uart implementation
+* https://github.com/abrasive/proxmark3/commit/2b8bff7daea8ae1193bf7ee29b1fa46e95218902
+*/
+// Static vars for UART
+typedef struct {
+	bool synced;
+	bool frame;
+	bool frame_done;
+	uint8_t *buf;
+	int len;
+} tUart;
 static tUart Uart;
+
+static void uart_reset(void){
+	Uart.frame_done = false;
+	Uart.synced = false;
+	Uart.frame = false;
+}
+static void uart_init(uint8_t *data){
+	Uart.buf = data;
+	uart_reset();
+}
+static void uart_bit(uint8_t bit) {
+    static uint8_t buf = 0xff;
+    static uint8_t n_buf;
+    static uint8_t msg_byte;
+    static int nmsg_byte;
+    buf <<= 1;
+    buf |= bit ? 1 : 0;
+
+    if (!Uart.frame) {
+        if (buf == 0x7b) {	// 0b0111 1011
+            Uart.frame = true;
+            n_buf = 0;
+            Uart.len = 0;
+            nmsg_byte = 0;
+        }
+    } else {
+        n_buf++;
+        if (n_buf == 8) {
+            msg_byte >>= 2;
+            switch (buf) {
+                case 0xbf:    // 0 - 1011 1111
+                    break;
+                case 0xef:    // 1 - 1110 1111 
+                    msg_byte |= (1<<6);
+                    break;
+                case 0xfb:    // 2 - 1111 1011
+                    msg_byte |= (2<<6);
+                    break;
+                case 0xfe:    // 3 - 1111 1110
+                    msg_byte |= (3<<6);
+                    break;
+                case 0xdf:    // eof - 1101 1111
+                    Uart.frame = false;
+                    Uart.synced = false;
+                    Uart.frame_done = true;
+                    break;
+                default:
+                    Uart.frame = false;
+					Uart.synced = false;
+                    Dbprintf("[-] bad %02X at %d:%d", buf, Uart.len, nmsg_byte);
+            }
+
+            if (Uart.frame) {   // data bits
+                nmsg_byte += 2;
+                if (nmsg_byte >= 8) {
+                    Uart.buf[Uart.len++] = msg_byte;
+                    nmsg_byte = 0;
+                }
+            }
+            n_buf = 0;
+            buf = 0xff;
+        }
+    }
+}
+
+static void uart_samples(uint8_t byte) {
+    static uint32_t buf;
+    static int window;
+    static int drop_next = 0;
+
+    uint32_t falling;
+    int lz;
+
+    if (!Uart.synced) {
+        if (byte == 0xFF)
+            return;
+        buf = 0xFFFFFFFF;
+        window = 0;
+        drop_next = 0;
+        Uart.synced = true;
+    }
+
+    buf <<= 8;
+    buf |= byte;
+
+    if (drop_next) {
+        drop_next = 0;
+        return;
+    }
+
+again:
+    falling = ~buf & ((buf >> 1) ^ buf) & (0xFF << window);
+
+    uart_bit(!falling);
+
+    if (!falling)
+        return;
+
+    lz = __builtin_clz(falling) - 24 + window;
+
+    // aim to get falling edge on fourth-leftmost bit of window
+    window += 3 - lz;
+
+    if (window < 0) {
+        window += 8;
+        drop_next = 1;
+    } else if (window >= 8) {
+        window -= 8;
+        goto again;
+    }
+}
+
+
+/*
 static void UartReset(){
 	Uart.state = STATE_UNSYNCD;
 	Uart.shiftReg = 0;
@@ -143,17 +270,14 @@ static void UartReset(){
     Uart.bitBuffer = 0;
     Uart.dropPosition = 0;
 }
-static void UartInit(uint8_t *data){
-	Uart.output = data;
-	UartReset();
-}
-
+*/
 
 /*
 * READER TO CARD
 *  1 out of 4 Decoding
 *  1 out of 256 Decoding
 */
+/*
 static RAMFUNC int OutOfNDecoding(int bit) {
 	//int error = 0;
 	int bitright;
@@ -166,15 +290,15 @@ static RAMFUNC int OutOfNDecoding(int bit) {
 		Uart.bitBuffer ^= bit;
 	}
 	
-	/*if (Uart.swapper) {
-		Uart.output[Uart.byteCnt] = Uart.bitBuffer & 0xFF;
-		Uart.byteCnt++;
-		Uart.swapper = 0;
-		if (Uart.byteCnt > 15) return true;
-	}
-	else {
-		Uart.swapper = 1;
-	}*/
+	// if (Uart.swapper) {
+	//	Uart.output[Uart.byteCnt] = Uart.bitBuffer & 0xFF;
+	//	Uart.byteCnt++;
+	//	Uart.swapper = 0;
+	//	if (Uart.byteCnt > 15) return true;
+	//}
+	//else {
+	//	Uart.swapper = 1;
+	//}
 
 	if (Uart.state != STATE_UNSYNCD) {
 		Uart.posCnt++;
@@ -301,7 +425,7 @@ static RAMFUNC int OutOfNDecoding(int bit) {
 					Uart.dropPosition = 0;
 				}
 			}
-
+*/
 			/*if (error) {
 				Uart.output[Uart.byteCnt] = 0xAA;
 				Uart.byteCnt++;
@@ -319,6 +443,7 @@ static RAMFUNC int OutOfNDecoding(int bit) {
 				Uart.byteCnt++;
 				return true;
 			}*/
+/*
 		}
 	} else {
 		bit = Uart.bitBuffer & 0xf0;
@@ -370,7 +495,7 @@ static RAMFUNC int OutOfNDecoding(int bit) {
 	}
     return false;
 }
-
+*/
 //=============================================================================
 // Manchester
 //=============================================================================
@@ -451,7 +576,7 @@ static void uart_debug(int error, int bit) {
 *
 *  So for current implementation in ISO15693, its 330 µs from end of reader, to start of card.
 */
-static RAMFUNC int ManchesterDecoding(int v) {
+static RAMFUNC int ManchesterDecoding_iclass( uint32_t v) {
 	int bit;
 	int modulation;
 	int error = 0;
@@ -665,7 +790,6 @@ static RAMFUNC int ManchesterDecoding(int v) {
 // Finally, a `sniffer' for iClass communication
 // Both sides of communication!
 //=============================================================================
-
 static void iclass_setup_sniff(void){
 	if (MF_DBGLEVEL > 3) Dbprintf("iclass_setup_sniff Enter");
 
@@ -687,11 +811,13 @@ static void iclass_setup_sniff(void){
 
 	// Initialize Demod and Uart structs
 	DemodInit(BigBuf_malloc(ICLASS_BUFFER_SIZE));
-	UartInit(BigBuf_malloc(ICLASS_BUFFER_SIZE));
+
+	uart_init(BigBuf_malloc(ICLASS_BUFFER_SIZE));
+	//UartInit(BigBuf_malloc(ICLASS_BUFFER_SIZE));
 
 	if (MF_DBGLEVEL > 1) {
 		// Print debug information about the buffer sizes
-		Dbprintf("Snooping buffers initialized:");
+		Dbprintf("[+] Sniffing buffers initialized:");
 		Dbprintf("  Trace: %i bytes", BigBuf_max_traceLen());
 		Dbprintf("  Reader -> tag: %i bytes", ICLASS_BUFFER_SIZE);
 		Dbprintf("  tag -> Reader: %i bytes", ICLASS_BUFFER_SIZE);
@@ -707,7 +833,7 @@ static void iclass_setup_sniff(void){
 	StartCountSspClk();
 	
 	LED_A_ON();
-	if (MF_DBGLEVEL > 3) Dbprintf("iclass_setup_sniff Exit");
+	if (MF_DBGLEVEL > 3) Dbprintf("[+] iclass_setup_sniff Exit");
 }
 
 //-----------------------------------------------------------------------------
@@ -718,18 +844,19 @@ static void iclass_setup_sniff(void){
 // turn off afterwards
 void RAMFUNC SniffIClass(void) {
 
-	uint8_t previous_data = 0;
-	int maxDataLen = 0, datalen = 0; 
+	//int datalen = 0; 
+	uint32_t previous_data = 0;	
 	uint32_t time_0 = 0, time_start = 0, time_stop  = 0;
     uint32_t sniffCounter = 0;
-
 	bool TagIsActive = false;
 	bool ReaderIsActive = false;
 	
 	iclass_setup_sniff();
 	
     // The DMA buffer, used to stream samples from the FPGA
+	// *dmaBuf is the start reference.
     uint8_t *dmaBuf = BigBuf_malloc(ICLASS_DMA_BUFFER_SIZE);
+	// pointer to samples from fpga
     uint8_t *data = dmaBuf;
 
 	// Setup and start DMA.
@@ -741,11 +868,20 @@ void RAMFUNC SniffIClass(void) {
 	// time ZERO, the point from which it all is calculated.
 	time_0 = GetCountSspClk();
 
+	int div = 0;
+	uint8_t tag_byte = 0, foo = 0;
     // loop and listen
+	// every sample (1byte in data),
+	//     contains HIGH nibble = reader data
+	//     contains LOW nibble = tag data
+	// so two bytes are needed in order to get 1byte of either reader or tag data.  (ie 2 sample bytes)
+	// since reader data is manchester encoded,  we need 2bytes of data in order to get one demoded byte.  (ie:  4 sample bytes)
 	while (!BUTTON_PRESS()) {
         WDT_HIT();
 
-		previous_data = *data;
+		previous_data <<= 8;
+		previous_data |= *data;
+		
 		sniffCounter++;	
 		data++;
 
@@ -754,105 +890,76 @@ void RAMFUNC SniffIClass(void) {
 			AT91C_BASE_PDC_SSC->PDC_RNPR = (uint32_t) dmaBuf;
 			AT91C_BASE_PDC_SSC->PDC_RNCR = ICLASS_DMA_BUFFER_SIZE;
 		}
-		// number of bytes we have processed so far
-		int register readBufData = data - dmaBuf;
-		// number of bytes already transferred		
-		int register dmaBufData = ICLASS_DMA_BUFFER_SIZE - AT91C_BASE_PDC_SSC->PDC_RCR;
 		
-		if (readBufData <= dmaBufData)
-			datalen = dmaBufData - readBufData;
-		else 
-			datalen = ICLASS_DMA_BUFFER_SIZE - readBufData + dmaBufData;
-		
-		/*
-		// test for length of buffer		
-		if (datalen > maxDataLen) {
-			maxDataLen = datalen;
-			if (datalen > (9 * ICLASS_DMA_BUFFER_SIZE / 10)) {
-				Dbprintf("[-] blew circular buffer! datalen=%d", datalen);
-				break;
-			}
+		if ( *data & 0xF) { 
+			//tag_byte <<= 1;
+			tag_byte ^= (1 << 4);
+			foo ^= (1 << (3 - div));
+			Dbprintf(" %d|%x == %d|%x", tag_byte, tag_byte, foo, foo);
 		}
-		*/
+		div++;
 		
-		// this part basically does wait until our DMA buffer got a value.
-		// well it loops, but the purpose is to wait.
-		if (datalen < 1) continue;
-			
-		// these two, is more of a "reset" the DMA buffers,  re-init.
-		// primary buffer was stopped( <-- we lost data!
-		
-		if (!AT91C_BASE_PDC_SSC->PDC_RCR) {
-			AT91C_BASE_PDC_SSC->PDC_RPR = (uint32_t) dmaBuf;
-			AT91C_BASE_PDC_SSC->PDC_RCR = ICLASS_DMA_BUFFER_SIZE;
-//			Dbprintf("Primary buffer ERROR!!! data length: %d", datalen); // temporary
-		}
-		
-		
-		// secondary buffer sets as primary, secondary buffer was stopped
-		if (!AT91C_BASE_PDC_SSC->PDC_RNCR) {
-			AT91C_BASE_PDC_SSC->PDC_RNPR = (uint32_t) dmaBuf;
-			AT91C_BASE_PDC_SSC->PDC_RNCR = ICLASS_DMA_BUFFER_SIZE;
-//			Dbprintf("Seconday buffer ERROR!!! data length: %d", datalen); // temporary	
-		}
-
+		// every odd sample
 		if (sniffCounter & 0x01) {
 			// no need to try decoding reader data if the tag is sending
 			// READER TO CARD
 			if (!TagIsActive) {
 				LED_C_INV();
 				// HIGH nibble is always reader data.
-				uint8_t readerdata = (previous_data & 0xF0) | (*data >> 4);
-				if ( OutOfNDecoding(readerdata) ) {
+				uint8_t reader_byte = (previous_data & 0xF0) | (*data >> 4);
+				uart_samples(reader_byte);
+				if (Uart.frame_done) {
 					time_stop = GetCountSspClk() - time_0;
-					LogTrace(Uart.output, Uart.byteCnt, time_start, time_stop, NULL, true);
+					LogTrace( Uart.buf, Uart.len, time_start, time_stop, NULL, true);
 					DemodReset();
-					UartReset();
+					uart_reset();
 				} else {
 					time_start = GetCountSspClk() - time_0;
 				}
-				ReaderIsActive = (Uart.state != STATE_UNSYNCD);		
+				ReaderIsActive = Uart.frame_done;
 			}
 		}
-		if ( sniffCounter % 3) {
+		// every four sample
+		if ( (sniffCounter % 4) == 0) {
 			// need two samples to feed Manchester
 			// no need to try decoding tag data if the reader is sending - and we cannot afford the time
 			// CARD TO READER
 			if (!ReaderIsActive) {
 				LED_C_INV();
 				// LOW nibble is always tag data.
-				uint8_t tagdata = (previous_data << 4) | (*data & 0x0F);
-				if (ManchesterDecoding(tagdata)) {
+				/*
+				
+				
+				uint32_t tag_byte = 
+						((previous_data & 0x0F000000) >> 8 )  |
+						((previous_data & 0x000F0000) >> 4 )  |
+						((previous_data & 0x00000F00)      )  |
+						((previous_data & 0x0000000F) << 4 )  |
+						(*data & 0xF);
+						*/
+				
+						
+				//uint8_t tag_byte = ((previous_data & 0xF) << 4 ) | (*data & 0xF);
+				if (ManchesterDecoding_iclass(foo)) {
 					time_stop = GetCountSspClk() - time_0;
 					LogTrace(Demod.output, Demod.len, time_start, time_stop, NULL, false);
 					DemodReset();
-					UartReset();
+					uart_reset();					
 				} else {
 					time_start = GetCountSspClk() - time_0;
 				}
 				TagIsActive = (Demod.state != DEMOD_UNSYNCD);
 			}
+			tag_byte = 0;
+			foo = 0;
+			div = 0;
 		}
 	} // end main loop
 
 	if (MF_DBGLEVEL >= 1) {	
 		DbpString("[+] Sniff statistics:");	
-		Dbprintf("[+]  maxDataLen=%x, Uart.state=%x, Uart.byteCnt=%x", maxDataLen, Uart.state, Uart.byteCnt);
-		Dbprintf("[+]  Tracelen=%x, Uart.output[0]=%x", BigBuf_get_traceLen(), (int)Uart.output[0]);
 		Dbhexdump(ICLASS_DMA_BUFFER_SIZE, data, false);
-		uint8_t r[128] = {0}; 
-		uint8_t t[128] = {0};
-		uint16_t i;
-		uint8_t j;
-		for (i=0, j=0; i<ICLASS_DMA_BUFFER_SIZE; i += 2, j++) {
-			r[j] = (data[i] & 0xF0)  | (data[i+1] >> 4);
-			t[j] = (data[i] << 4) | (data[i+1] & 0xF);
 		}
-		DbpString("reader:");
-		Dbhexdump(sizeof(r), r, false);
-		DbpString("tag:");
-		Dbhexdump(sizeof(t), t, false);
-	}
 	
 	switch_off(); 
 }
@@ -874,25 +981,24 @@ static bool GetIClassCommandFromReader(uint8_t *received, int *len, int maxLen) 
     // only, since we are receiving, not transmitting).
     // Signal field is off with the appropriate LED
     LED_D_OFF();
-    FpgaWriteConfWord(FPGA_MAJOR_MODE_HF_ISO14443A | FPGA_HF_ISO14443A_TAGSIM_LISTEN);
-
-	// Now run a `software UART' on the stream of incoming samples.
-	UartInit(received);
+	uart_init(received);
 	
+    FpgaWriteConfWord(FPGA_MAJOR_MODE_HF_ISO14443A | FPGA_HF_ISO14443A_TAGSIM_LISTEN);
 	// clear RXRDY:
     uint8_t b = (uint8_t)AT91C_BASE_SSC->SSC_RHR;
 
 	while (!BUTTON_PRESS()) {
         WDT_HIT();
 
-        //if (AT91C_BASE_SSC->SSC_SR & (AT91C_SSC_TXRDY))
-            // AT91C_BASE_SSC->SSC_THR = 0x00;
+        if (AT91C_BASE_SSC->SSC_SR & (AT91C_SSC_TXRDY))
+            AT91C_BASE_SSC->SSC_THR = 0x00;
 
         if (AT91C_BASE_SSC->SSC_SR & (AT91C_SSC_RXRDY)) {
             b = (uint8_t)AT91C_BASE_SSC->SSC_RHR;
 
-			if (OutOfNDecoding(b & 0x0f)) {
-				*len = Uart.byteCnt;
+            uart_samples(b);
+            if (Uart.frame_done) {
+                *len = Uart.len;
 				return true;
 			}
         }
@@ -1021,11 +1127,14 @@ void SimulateIClass(uint32_t arg0, uint32_t arg1, uint32_t arg2, uint8_t *datain
 	LEDsoff();
 
 	FpgaWriteConfWord(FPGA_MAJOR_MODE_OFF);
+
 	// this will clear out bigbuf memory,  the eload command must select this before!
 	FpgaDownloadAndGo(FPGA_BITSTREAM_HF);
-	FpgaSetupSsc();
+	
 	SetAdcMuxFor(GPIO_MUXSEL_HIPKD);
-
+	
+	FpgaSetupSsc();
+	
 	// Enable and clear the trace
 	clear_trace();
 	set_tracing(true);
@@ -1053,19 +1162,20 @@ void SimulateIClass(uint32_t arg0, uint32_t arg1, uint32_t arg2, uint8_t *datain
 		// In this mode, a number of csns are within datain. We'll simulate each one, one at a time
 		// in order to collect MAC's from the reader. This can later be used in an offlne-attack
 		// in order to obtain the keys, as in the "dismantling iclass"-paper.
+		#define EPURSE_MAC_SIZE 16
 		int i = 0;
-		for (; i < numberOfCSNS && i*8 + 8 < USB_CMD_DATA_SIZE; i++) {
+		for (; i < numberOfCSNS && i * EPURSE_MAC_SIZE + 8 < USB_CMD_DATA_SIZE; i++) {
 			// The usb data is 512 bytes, fitting 65 8-byte CSNs in there.
 
 			memcpy(emulator, datain + (i*8), 8);
 			
-			if (doIClassSimulation(MODE_EXIT_AFTER_MAC, mac_responses+i*8)) {
+			if (doIClassSimulation(MODE_EXIT_AFTER_MAC, mac_responses+i * EPURSE_MAC_SIZE)) {
 				// Button pressed
-				cmd_send(CMD_ACK, CMD_SIMULATE_TAG_ICLASS, i, 0, mac_responses, i*8);
+				cmd_send(CMD_ACK, CMD_SIMULATE_TAG_ICLASS, i, 0, mac_responses, i * EPURSE_MAC_SIZE);
 				goto out;
 			}
 		}
-		cmd_send(CMD_ACK, CMD_SIMULATE_TAG_ICLASS, i, 0, mac_responses, i*8);
+		cmd_send(CMD_ACK, CMD_SIMULATE_TAG_ICLASS, i, 0, mac_responses, i * EPURSE_MAC_SIZE);
 
 	} else if (simType == 3){
 		//This is 'full sim' mode, where we use the emulator storage for data.
@@ -1086,26 +1196,26 @@ void SimulateIClass(uint32_t arg0, uint32_t arg1, uint32_t arg2, uint8_t *datain
 		// attack below is same as SIM 2, but we run the CSN twice to collected the mac for both keys.
 		int i = 0;
 		// The usb data is 512 bytes, fitting 65 8-byte CSNs in there.  iceman fork uses 9 CSNS
-		for (; i < numberOfCSNS && i*8 + 8 < USB_CMD_DATA_SIZE; i++) {
+		for (; i < numberOfCSNS && i * EPURSE_MAC_SIZE + 8 < USB_CMD_DATA_SIZE; i++) {
 
 			memcpy(emulator, datain + (i*8), 8);
 			
 			// keyroll 1 			
-			if (doIClassSimulation(MODE_EXIT_AFTER_MAC, mac_responses + i*8 )) {
-				cmd_send(CMD_ACK, CMD_SIMULATE_TAG_ICLASS, i*2, 0, mac_responses, i * 8 * 2);
+			if (doIClassSimulation(MODE_EXIT_AFTER_MAC, mac_responses + i * EPURSE_MAC_SIZE )) {
+				cmd_send(CMD_ACK, CMD_SIMULATE_TAG_ICLASS, i*2, 0, mac_responses, i * EPURSE_MAC_SIZE * 2);
 				// Button pressed
 				goto out; 
 			}
 
 			// keyroll 2
-			if (doIClassSimulation(MODE_EXIT_AFTER_MAC, mac_responses + (i + numberOfCSNS) * 8 )) {
-				cmd_send(CMD_ACK, CMD_SIMULATE_TAG_ICLASS, i*2, 0, mac_responses, i * 8 * 2);
+			if (doIClassSimulation(MODE_EXIT_AFTER_MAC, mac_responses + (i + numberOfCSNS) * EPURSE_MAC_SIZE )) {
+				cmd_send(CMD_ACK, CMD_SIMULATE_TAG_ICLASS, i*2, 0, mac_responses, i * EPURSE_MAC_SIZE* 2);
 				// Button pressed
 				goto out; 
 			}			
 		}
 		// double the amount of collected data.
-		cmd_send(CMD_ACK, CMD_SIMULATE_TAG_ICLASS, i*2, 0, mac_responses, i * 8 * 2 );
+		cmd_send(CMD_ACK, CMD_SIMULATE_TAG_ICLASS, i*2, 0, mac_responses, i * EPURSE_MAC_SIZE * 2 );
 	
 	} else {
 		// We may want a mode here where we hardcode the csns to use (from proxclone).
@@ -1115,9 +1225,7 @@ void SimulateIClass(uint32_t arg0, uint32_t arg1, uint32_t arg2, uint8_t *datain
 
 out:	
 	switch_off(); 
-}
-void AppendCrc(uint8_t* data, int len) {
-	ComputeCrc14443(CRC_ICLASS, data, len, data+len, data+len+1);
+	BigBuf_free_keep_EM();
 }
 
 /**
@@ -1140,18 +1248,18 @@ int doIClassSimulation( int simulationMode, uint8_t *reader_mac_buf) {
 	uint8_t anticoll_data[10] = { 0 };
 	uint8_t csn_data[10] = { 0 };
 	memcpy(csn_data, csn, sizeof(csn_data));
-	Dbprintf("[+] Simulating CSN %02x%02x%02x%02x%02x%02x%02x%02x", csn[0], csn[1], csn[2], csn[3], csn[4], csn[5], csn[6], csn[7]);
 
 	// Construct anticollision-CSN
 	rotateCSN(csn_data, anticoll_data);
 
 	// Compute CRC on both CSNs
-	ComputeCrc14443(CRC_ICLASS, anticoll_data, 8, &anticoll_data[8], &anticoll_data[9]);
-	ComputeCrc14443(CRC_ICLASS, csn_data, 8, &csn_data[8], &csn_data[9]);
-
+	AddCrc(anticoll_data, 8);
+	AddCrc(csn_data, 8);
+	
 	uint8_t diversified_key[8] = { 0 };
 	// e-Purse
 	uint8_t card_challenge_data[8] = { 0xfe,0xff,0xff,0xff,0xff,0xff,0xff,0xff };
+	//uint8_t card_challenge_data[8] = { 0 };
 	if (simulationMode == MODE_FULLSIM) {
 		//The diversified key should be stored on block 3
 		//Get the diversified key from emulator memory
@@ -1162,7 +1270,11 @@ int doIClassSimulation( int simulationMode, uint8_t *reader_mac_buf) {
 		//Precalculate the cipher state, feeding it the CC
 		cipher_state = opt_doTagMAC_1(card_challenge_data, diversified_key);
 	}
-
+	// set epurse of sim2,4 attack
+	if (reader_mac_buf != NULL)	{
+		memcpy(reader_mac_buf, card_challenge_data, 8);
+	}	
+	
 	int exitLoop = 0;
 	// Reader 0a
 	// Tag    0f
@@ -1187,25 +1299,25 @@ int doIClassSimulation( int simulationMode, uint8_t *reader_mac_buf) {
 
 	// CSN
 	// 22: Takes 2 bytes for SOF/EOF and 10 * 2 = 20 bytes (2 bytes/byte)
-	uint8_t *resp_csn = BigBuf_malloc(30);
+	uint8_t *resp_csn = BigBuf_malloc(28);
 	int resp_csn_len;
 
 	// configuration  picopass 2ks
-	uint8_t *resp_conf = BigBuf_malloc(20);
+	uint8_t *resp_conf = BigBuf_malloc(28);
 	int resp_conf_len;
 	uint8_t conf_data[10] = {0x12,0xFF,0xFF,0xFF,0x7F,0x1F,0xFF,0x3C,0x00,0x00};
-	ComputeCrc14443(CRC_ICLASS, conf_data, 8, &conf_data[8], &conf_data[9]);
+	AddCrc(conf_data, 8);
 	
 	// e-Purse
 	// 18: Takes 2 bytes for SOF/EOF and 8 * 2 = 16 bytes (2 bytes/bit)
-	uint8_t *resp_cc = BigBuf_malloc(20);
+	uint8_t *resp_cc = BigBuf_malloc(28);
 	int resp_cc_len;
 
 	// Application Issuer Area 
-	uint8_t *resp_aia = BigBuf_malloc(20);
+	uint8_t *resp_aia = BigBuf_malloc(28);
 	int resp_aia_len;
 	uint8_t aia_data[10] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0x00,0x00};
-	ComputeCrc14443(CRC_ICLASS, aia_data, 8, &aia_data[8], &aia_data[9]);
+	AddCrc(aia_data, 8);
 
 	// receive command
 	uint8_t *receivedCmd = BigBuf_malloc(MAX_FRAME_SIZE);
@@ -1217,50 +1329,26 @@ int doIClassSimulation( int simulationMode, uint8_t *reader_mac_buf) {
 	// First card answer: SOF
 	CodeIClassTagSOF();
 	memcpy(resp_sof, ToSend, ToSendMax); resp_sof_Len = ToSendMax;
-	if ( MF_DBGLEVEL ==  MF_DBG_EXTENDED) {
-		DbpString("SOF"); 
-		PrintToSendBuffer();
-	}
 	
 	// Anticollision CSN
 	CodeIClassTagAnswer(anticoll_data, sizeof(anticoll_data));
 	memcpy(resp_anticoll, ToSend, ToSendMax); resp_anticoll_len = ToSendMax;
-	if ( MF_DBGLEVEL ==  MF_DBG_EXTENDED) {
-		DbpString("ANTI COLL CSN"); 
-		PrintToSendBuffer();
-	}
 	
 	// CSN
 	CodeIClassTagAnswer(csn_data, sizeof(csn_data));
 	memcpy(resp_csn, ToSend, ToSendMax); resp_csn_len = ToSendMax;
-	if ( MF_DBGLEVEL ==  MF_DBG_EXTENDED) {
-		DbpString("CSN");
-		PrintToSendBuffer();
-	}
 
 	// Configuration
 	CodeIClassTagAnswer(conf_data, sizeof(conf_data));
 	memcpy(resp_conf, ToSend, ToSendMax); resp_conf_len = ToSendMax;
-	if ( MF_DBGLEVEL ==  MF_DBG_EXTENDED) {
-		DbpString("Configuration"); 
-		PrintToSendBuffer();
-	}
 	
 	// e-Purse
 	CodeIClassTagAnswer(card_challenge_data, sizeof(card_challenge_data));
 	memcpy(resp_cc, ToSend, ToSendMax); resp_cc_len = ToSendMax;
-	if ( MF_DBGLEVEL ==  MF_DBG_EXTENDED) {
-		DbpString("e-Purse"); 
-		PrintToSendBuffer();
-	}
 
 	// Application Issuer Area
 	CodeIClassTagAnswer(aia_data, sizeof(aia_data));
 	memcpy(resp_aia, ToSend, ToSendMax); resp_aia_len = ToSendMax;
-	if ( MF_DBGLEVEL ==  MF_DBG_EXTENDED) {
-		DbpString("Application Issuer Data"); 
-		PrintToSendBuffer();
-	}
 
 	//This is used for responding to READ-block commands or other data which is dynamically generated
 	//First the 'trace'-data, not encoded for FPGA
@@ -1271,7 +1359,7 @@ int doIClassSimulation( int simulationMode, uint8_t *reader_mac_buf) {
 	uint8_t *data_response = BigBuf_malloc( (8+2) * 2 + 2);
 
 	FpgaWriteConfWord(FPGA_MAJOR_MODE_HF_ISO14443A | FPGA_HF_ISO14443A_TAGSIM_LISTEN);
-
+	SpinDelay(100);
 	StartCountSspClk();
 
 	// To control where we are in the protocol
@@ -1281,7 +1369,7 @@ int doIClassSimulation( int simulationMode, uint8_t *reader_mac_buf) {
 
 	LED_A_ON();
 	bool buttonPressed = false;
-	uint16_t response_delay = 1;
+
 	while (!exitLoop) {
 		WDT_HIT();
 
@@ -1297,7 +1385,6 @@ int doIClassSimulation( int simulationMode, uint8_t *reader_mac_buf) {
 		r2t_etime = ((GetCountSspClk() - time_0) << 4 ) - r2t_stime;
 		
 		// 330us normal wait,  adjusted for our execution
-		response_delay = 230;
 
 		LED_C_ON();	//Signal tracer
 
@@ -1307,34 +1394,72 @@ int doIClassSimulation( int simulationMode, uint8_t *reader_mac_buf) {
 			trace_data = sof_data;
 			trace_data_size = sizeof(sof_data);
 			// adjusted for 330 + (160*num of slot) 
-			response_delay = 330 + 160;
-		} else if (receivedCmd[0] == ICLASS_CMD_READ_OR_IDENTIFY && len == 1) { // 0x0C
-			// Reader asks for anticollission CSN
-			modulated_response = resp_anticoll; modulated_response_size = resp_anticoll_len; //order = 2;
-			trace_data = anticoll_data;
-			trace_data_size = sizeof(anticoll_data);
+			goto send;
+		} else if (receivedCmd[0] == ICLASS_CMD_READ_OR_IDENTIFY) { // 0x0C
+			if (len == 1) {
+				// Reader asks for anticollission CSN
+				modulated_response = resp_anticoll; modulated_response_size = resp_anticoll_len; //order = 2;
+				trace_data = anticoll_data;
+				trace_data_size = sizeof(anticoll_data);
+				goto send;	
+			}
+			if (len == 4){ 
+				// block0,1,2,5 is always readable.
+				switch (receivedCmd[1]){
+					case 0:	// csn (0c 00)
+						modulated_response = resp_csn; modulated_response_size = resp_csn_len;
+						trace_data = csn_data;
+						trace_data_size = sizeof(csn_data);
+						break;
+					case 1:	// configuration (0c 01)
+						modulated_response = resp_conf; modulated_response_size = resp_conf_len;
+						trace_data = conf_data;
+						trace_data_size = sizeof(conf_data);
+						break;
+					case 2: // e-purse (0c 02)	
+						modulated_response = resp_cc; modulated_response_size = resp_cc_len;
+						trace_data = card_challenge_data;
+						trace_data_size = sizeof(card_challenge_data);
+						// set epurse of sim2,4 attack
+						if (reader_mac_buf != NULL)	{
+							memcpy(reader_mac_buf, card_challenge_data, 8);
+						}
+						break;
+					case 5:// Application Issuer Area (0c 05)
+						modulated_response = resp_aia; modulated_response_size = resp_aia_len;
+						trace_data = aia_data;
+						trace_data_size = sizeof(aia_data);
+						break;
+					default: break;
+				}
+				goto send;				
+			}
+			
 		} else if (receivedCmd[0] == ICLASS_CMD_SELECT) { // 0x81
 			// Reader selects anticollission CSN.
 			// Tag sends the corresponding real CSN
 			modulated_response = resp_csn; modulated_response_size = resp_csn_len; //order = 3;
 			trace_data = csn_data;
 			trace_data_size = sizeof(csn_data);
+			goto send;			
 		} else if (receivedCmd[0] == ICLASS_CMD_READCHECK_KD) { // 0x88
 			// Read e-purse (88 02)
 			modulated_response = resp_cc; modulated_response_size = resp_cc_len; //order = 4;
 			trace_data = card_challenge_data;
 			trace_data_size = sizeof(card_challenge_data);
 			LED_B_ON();
+			goto send;			
 		} else if (receivedCmd[0] == ICLASS_CMD_READCHECK_KC) { // 0x18
 			// Read e-purse (18 02)
 			modulated_response = resp_cc; modulated_response_size = resp_cc_len; //order = 4;
 			trace_data = card_challenge_data;
 			trace_data_size = sizeof(card_challenge_data);
 			LED_B_ON();
+			goto send;			
 		} else if (receivedCmd[0] == ICLASS_CMD_CHECK) { // 0x05
 			// Reader random and reader MAC!!!
 			if (simulationMode == MODE_FULLSIM) {
-				//NR, from reader, is in receivedCmd +1
+				// NR, from reader, is in receivedCmd +1
 				opt_doTagMAC_2(cipher_state, receivedCmd+1, data_generic_trace, diversified_key);
 
 				trace_data = data_generic_trace;
@@ -1343,76 +1468,50 @@ int doIClassSimulation( int simulationMode, uint8_t *reader_mac_buf) {
 				memcpy(data_response, ToSend, ToSendMax);
 				modulated_response = data_response;
 				modulated_response_size = ToSendMax;
-				response_delay = 0;//We need to hurry here...
-				//exitLoop = true;
 			} else {
-				//Not fullsim, we don't respond
+				// Not fullsim, we don't respond
 				// We do not know what to answer, so lets keep quiet
 				modulated_response = resp_sof; modulated_response_size = 0;
 				trace_data = NULL;
 				trace_data_size = 0;
 				
 				if (simulationMode == MODE_EXIT_AFTER_MAC) {
-					// dbprintf:ing ...
-					Dbprintf("CSN: %02x %02x %02x %02x %02x %02x %02x %02x", csn[0], csn[1], csn[2], csn[3], csn[4], csn[5], csn[6], csn[7]);
-					Dbprintf("RDR:  (len=%02d): %02x %02x %02x %02x %02x %02x %02x %02x %02x", len,
+					
+					if ( MF_DBGLEVEL ==  MF_DBG_EXTENDED) {
+						Dbprintf("[+] CSN: %02x %02x %02x %02x %02x %02x %02x %02x", csn[0], csn[1], csn[2], csn[3], csn[4], csn[5], csn[6], csn[7]);
+						Dbprintf("[+] RDR:  (len=%02d): %02x %02x %02x %02x %02x %02x %02x %02x %02x", len,
 							receivedCmd[0], receivedCmd[1], receivedCmd[2],
 							receivedCmd[3], receivedCmd[4], receivedCmd[5],
 							receivedCmd[6], receivedCmd[7], receivedCmd[8]);
-
+					} else {
+						Dbprintf("[+] CSN: %02x .... %02x OK", csn[0], csn[7]);
+					}
 					if (reader_mac_buf != NULL)	{
-						memcpy(reader_mac_buf, receivedCmd+1, 8);
+						memcpy(reader_mac_buf + 8, receivedCmd+1, 8);
 					}
 					exitLoop = true;
 				}
 			}
-
+			goto send;
 		} else if (receivedCmd[0] == ICLASS_CMD_HALT && len == 1) {
 			// Reader ends the session
 			modulated_response = resp_sof; modulated_response_size = 0; //order = 0;
 			trace_data = NULL;
 			trace_data_size = 0;
-		// sim 2 / 4,   
-		} else if (simulationMode == MODE_EXIT_AFTER_MAC && receivedCmd[0] == ICLASS_CMD_READ_OR_IDENTIFY && len == 4){  // 0x0C
-			// block0,1,2,5 is always readable.
-			uint16_t blk = receivedCmd[1];
-			switch (blk){
-				case 0:	// csn (0c 00)
-					modulated_response = resp_csn; modulated_response_size = resp_csn_len;
-					trace_data = csn_data;
-					trace_data_size = sizeof(csn_data);
-					break;
-				case 1:	// configuration (0c 01)
-					modulated_response = resp_conf; modulated_response_size = resp_conf_len;
-					trace_data = conf_data;
-					trace_data_size = sizeof(conf_data);
-					break;
-				case 2: // e-purse (0c 02)	
-					modulated_response = resp_cc; modulated_response_size = resp_cc_len;
-					trace_data = card_challenge_data;
-					trace_data_size = sizeof(card_challenge_data);
-					break;
-				case 5:// Application Issuer Area (0c 05)
-					modulated_response = resp_aia; modulated_response_size = resp_aia_len;
-					trace_data = aia_data;
-					trace_data_size = sizeof(aia_data);
-					break;
-				default: break;
-			}						
-			
+			goto send;
 		} else if (simulationMode == MODE_FULLSIM && receivedCmd[0] == ICLASS_CMD_READ_OR_IDENTIFY && len == 4){ // 0x0C
 			//Read block
 			uint16_t blk = receivedCmd[1];
 			//Take the data...
 			memcpy(data_generic_trace, emulator+(blk << 3),8);
-			//Add crc
-			AppendCrc(data_generic_trace, 8);
+			AddCrc(data_generic_trace, 8);
 			trace_data = data_generic_trace;
 			trace_data_size = 10;
 			CodeIClassTagAnswer(trace_data , trace_data_size);
 			memcpy(data_response, ToSend, ToSendMax);
 			modulated_response = data_response;
 			modulated_response_size = ToSendMax;
+			goto send;
 		} else if (simulationMode == MODE_FULLSIM && receivedCmd[0] == ICLASS_CMD_UPDATE) {
 			
 			//Probably the reader wants to update the nonce. Let's just ignore that for now.
@@ -1422,8 +1521,7 @@ int doIClassSimulation( int simulationMode, uint8_t *reader_mac_buf) {
 
 			//Take the data...
 			memcpy(data_generic_trace, receivedCmd+2, 8);
-			//Add crc
-			AppendCrc(data_generic_trace, 8);
+			AddCrc(data_generic_trace, 8);
 			trace_data = data_generic_trace;
 			trace_data_size = 10;
 			CodeIClassTagAnswer(trace_data, trace_data_size);
@@ -1431,8 +1529,8 @@ int doIClassSimulation( int simulationMode, uint8_t *reader_mac_buf) {
 			memcpy(data_response, ToSend, ToSendMax);
 			modulated_response = data_response;
 			modulated_response_size = ToSendMax;			
-			response_delay = 4000;  // tPROG 4-15ms
-			
+//			response_delay = 4600 * 1.5;  // tPROG 4-15ms
+			goto send;
 //		} else if(receivedCmd[0] == ICLASS_CMD_PAGESEL)	{  // 0x84
 			//Pagesel
 			//Pagesel enables to select a page in the selected chip memory and return its configuration block
@@ -1452,13 +1550,14 @@ int doIClassSimulation( int simulationMode, uint8_t *reader_mac_buf) {
 			trace_data = NULL;
 			trace_data_size = 0;
 		}
-		
+
+send:		
 		/**
 		A legit tag has about 330us delay between reader EOT and tag SOF.
 		**/
 		if (modulated_response_size > 0) {
 			t2r_stime = (GetCountSspClk() - time_0) << 4;
-			SendIClassAnswer(modulated_response, modulated_response_size, response_delay);
+			SendIClassAnswer(modulated_response, modulated_response_size, 0);
 			t2r_etime = ((GetCountSspClk() - time_0) << 4 ) - t2r_stime;
 		}
 
@@ -1483,14 +1582,11 @@ int doIClassSimulation( int simulationMode, uint8_t *reader_mac_buf) {
  * @param delay
  */
 static int SendIClassAnswer(uint8_t *resp, int respLen, uint16_t delay) {
-	int i = 0; // d = 0;
-	uint8_t b = 0;
+	int i = 0;
+	volatile uint8_t b = 0;
 
 	FpgaWriteConfWord(FPGA_MAJOR_MODE_HF_SIMULATOR | FPGA_HF_SIMULATOR_MODULATE_424K_8BIT);	
 	AT91C_BASE_SSC->SSC_THR = 0x00;
-
-	SpinDelayUs(delay);  // So, first make sure we timeout previous comms.	
-
 	while (!BUTTON_PRESS()) {
 		if ( (AT91C_BASE_SSC->SSC_SR & AT91C_SSC_RXRDY)){
 			b = AT91C_BASE_SSC->SSC_RHR; (void) b;
@@ -1519,7 +1615,7 @@ static int SendIClassAnswer(uint8_t *resp, int respLen, uint16_t delay) {
 static void TransmitIClassCommand(const uint8_t *cmd, int len, int *samples, int *wait) {
 
 	int c = 0;
-	volatile uint32_t r;
+	volatile uint32_t b;
 	bool firstpart = true;
 	uint8_t sendbyte;
 
@@ -1554,7 +1650,7 @@ static void TransmitIClassCommand(const uint8_t *cmd, int len, int *samples, int
 		}
 
 		if (AT91C_BASE_SSC->SSC_SR & (AT91C_SSC_RXRDY)) {
-			r = AT91C_BASE_SSC->SSC_RHR; (void)r;
+			b = AT91C_BASE_SSC->SSC_RHR; (void)b;
 		}		
 	}
 
@@ -1646,7 +1742,7 @@ static int GetIClassAnswer(uint8_t* receivedResponse, int maxLen, int *samples, 
 	// Set FPGA mode to "reader listen mode", no modulation (listen
 	// only, since we are receiving, not transmitting).
 	FpgaWriteConfWord(FPGA_MAJOR_MODE_HF_ISO14443A | FPGA_HF_ISO14443A_READER_LISTEN);
-	SpinDelayUs(330);  //310 Tout= 330us (iso15603-2)   (330/21.3) take consideration for clock increments.
+	SpinDelayUs(320);  //310 Tout= 330us (iso15603-2)   (330/21.3) take consideration for clock increments.
 
 	// clear RXRDY:
     uint8_t b = (uint8_t)AT91C_BASE_SSC->SSC_RHR;
@@ -1670,7 +1766,7 @@ static int GetIClassAnswer(uint8_t* receivedResponse, int maxLen, int *samples, 
 			skip = !skip;			
 			if (skip) continue;
 		
-			if (ManchesterDecoding(b & 0x0f)) {
+			if (ManchesterDecoding_iclass(b & 0x0f)) {
 				if (samples) 
 					*samples = c << 3;
 				return true;
@@ -1706,9 +1802,9 @@ void setupIclassReader() {
 	
     FpgaDownloadAndGo(FPGA_BITSTREAM_HF);
 	
-    FpgaSetupSsc();
-
     SetAdcMuxFor(GPIO_MUXSEL_HIPKD);
+	
+    FpgaSetupSsc();
 
     // Reset trace buffer
 	clear_trace();
@@ -1718,7 +1814,7 @@ void setupIclassReader() {
     // Signal field is on with the appropriate LED
     FpgaWriteConfWord(FPGA_MAJOR_MODE_HF_ISO14443A | FPGA_HF_ISO14443A_READER_MOD);
     SpinDelay(300);
-
+	
 	// Start the timer
 	StartCountSspClk();
 	
@@ -1726,11 +1822,22 @@ void setupIclassReader() {
 }
 
 bool sendCmdGetResponseWithRetries(uint8_t* command, size_t cmdsize, uint8_t* resp, uint8_t expected_size, uint8_t retries) {
+	uint8_t got_n = 0;
 	while (retries-- > 0) {
 		
 		ReaderTransmitIClass(command, cmdsize);
 		
-		if (expected_size == ReaderReceiveIClass(resp))
+		//iceman - if received size is bigger than expected, we smash the stack here
+		//		since its called with fixed sized arrays
+		got_n = ReaderReceiveIClass(resp);
+		
+		// 0xBB is the internal debug separator byte..
+		if ( expected_size != got_n|| (resp[0] == 0xBB || resp[7] == 0xBB || resp[2] == 0xBB)) {
+			//try again
+			continue;
+		}
+	
+		if (got_n == expected_size)
 			return true;
 	}
 	return false;
@@ -1749,9 +1856,9 @@ uint8_t handshakeIclassTag_ext(uint8_t *card_data, bool use_credit_key) {
 	static uint8_t act_all[]      = { ICLASS_CMD_ACTALL };
 	static uint8_t identify[]     = { ICLASS_CMD_READ_OR_IDENTIFY, 0x00, 0x73, 0x33 };
 	static uint8_t select[]       = { ICLASS_CMD_SELECT, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-	static uint8_t readcheck_cc[] = { ICLASS_CMD_READCHECK_KD, 0x02 };
+	uint8_t readcheck_cc[] = { ICLASS_CMD_READCHECK_KD, 0x02 };
 
-	if  (use_credit_key) 
+	if (use_credit_key) 
 		readcheck_cc[0] = ICLASS_CMD_READCHECK_KC;
 
 	uint8_t resp[ICLASS_BUFFER_SIZE] = {0};
@@ -1759,8 +1866,7 @@ uint8_t handshakeIclassTag_ext(uint8_t *card_data, bool use_credit_key) {
 
 	// Send act_all
 	ReaderTransmitIClass_ext(act_all, 1, 330+160);
-
-	// Card present?
+	// Card present?	
 	if (!ReaderReceiveIClass(resp)) return read_status;//Fail
 
 	//Send Identify
@@ -1777,7 +1883,7 @@ uint8_t handshakeIclassTag_ext(uint8_t *card_data, bool use_credit_key) {
 	ReaderTransmitIClass(select, sizeof(select));
 	
 	//We expect a 10-byte response here, 8 byte CSN and 2 byte CRC
-	len  = ReaderReceiveIClass(resp);
+	len = ReaderReceiveIClass(resp);
 	if (len != 10) return read_status;//Fail
 
 	//Success - level 1, we got CSN
@@ -1788,13 +1894,19 @@ uint8_t handshakeIclassTag_ext(uint8_t *card_data, bool use_credit_key) {
 	read_status = 1;
 
 	// Card selected, now read e-purse (cc) (block2) (only 8 bytes no CRC)
-	ReaderTransmitIClass(readcheck_cc, sizeof(readcheck_cc));
-	if (ReaderReceiveIClass(resp) == 8) {
-		//Save CC (e-purse) in response data
-		memcpy(card_data+8, resp, 8);
-		read_status++;
-	}
-
+	//	ReaderTransmitIClass(readcheck_cc, sizeof(readcheck_cc));
+	// if (ReaderReceiveIClass(resp) == 8) {
+		// //Save CC (e-purse) in response data
+		// memcpy(card_data+8, resp, 8);
+		// read_status++;
+	// }
+			
+	bool isOK = sendCmdGetResponseWithRetries(readcheck_cc, sizeof(readcheck_cc), resp, 8, 3);
+	if (!isOK) return read_status;
+	
+	//Save CC (e-purse) in response data
+	memcpy(card_data+8, resp, 8);
+	read_status++;
 	return read_status;
 }
 uint8_t handshakeIclassTag(uint8_t *card_data){
@@ -1944,20 +2056,12 @@ void ReaderIClass(uint8_t arg0) {
 // turn off afterwards
 void ReaderIClass_Replay(uint8_t arg0, uint8_t *MAC) {
 
-    uint16_t crc = 0;
 	uint8_t cardsize = 0;
 	uint8_t mem = 0;
 	uint8_t check[] = { 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 	uint8_t read[]  = { 0x0c, 0x00, 0x00, 0x00 };
 	uint8_t card_data[USB_CMD_DATA_SIZE] = {0};
-	uint16_t block_crc_LUT[255] = {0};
 	uint8_t resp[ICLASS_BUFFER_SIZE] = {0};
-
-	//Generate a lookup table for block crc
-	for (int block = 0; block < 255; block++){
-		char bl = block;
-		block_crc_LUT[block] = iclass_crc16(&bl ,1);
-	}
 
 	static struct memory_t{
 	  int k16;
@@ -1985,10 +2089,8 @@ void ReaderIClass_Replay(uint8_t arg0, uint8_t *MAC) {
 		}
 
 		//first get configuration block (block 1)
-		crc = block_crc_LUT[1];
 		read[1] = 1;
-		read[2] = crc >> 8;
-		read[3] = crc & 0xff;
+		AddCrc( read+1, 1 );
 
 		if (!sendCmdGetResponseWithRetries(read, sizeof(read), resp, 10, 5)) {
 			DbpString("Dump config (block 1) failed");
@@ -2011,12 +2113,10 @@ void ReaderIClass_Replay(uint8_t arg0, uint8_t *MAC) {
 		uint32_t stored_data_length = 0;
 
 		//then loop around remaining blocks
-		for (int block=0; block < cardsize; block++) {
+		for ( uint16_t block=0; block < cardsize; block++) {
 
 			read[1] = block;
-			crc = block_crc_LUT[block];
-			read[2] = crc >> 8;
-			read[3] = crc & 0xff;
+			AddCrc( read+1, 1 );
 
 			if (sendCmdGetResponseWithRetries(read, sizeof(read), resp, 10, 5)) {
 				Dbprintf("     %02x: %02x %02x %02x %02x %02x %02x %02x %02x",
@@ -2069,7 +2169,6 @@ void ReaderIClass_Replay(uint8_t arg0, uint8_t *MAC) {
 			 card_data,
 			 0
 	);
-
 	switch_off(); 
 }
 
@@ -2089,7 +2188,13 @@ void iClass_ReadCheck(uint8_t blockNo, uint8_t keyType) {
 void iClass_Authentication(uint8_t *mac) {
 	uint8_t check[] = { ICLASS_CMD_CHECK, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 	uint8_t resp[ICLASS_BUFFER_SIZE];
-	memcpy(check+5, mac, 4);
+
+	// copy MAC to check command (readersignature)
+	check[5] = mac[0];
+	check[6] = mac[1];
+	check[7] = mac[2];
+	check[8] = mac[3];
+	//memcpy(check+5, mac, 4);
 	
 	// 6 retries 
 	bool isOK = sendCmdGetResponseWithRetries(check, sizeof(check), resp, 4, 6);
@@ -2126,6 +2231,9 @@ void iClass_Authentication_fast(uint64_t arg0, uint64_t arg1, uint8_t *datain) {
 		
 	LED_A_ON();
 	
+	switch_off();
+	SpinDelay(20);
+	
 	setupIclassReader();
 
 	int read_status = 0;
@@ -2133,34 +2241,25 @@ void iClass_Authentication_fast(uint64_t arg0, uint64_t arg1, uint8_t *datain) {
 	while ( read_status != 2) {
 		
 		if (BUTTON_PRESS() && !usb_poll_validate_length()) goto out;
-
+		
 		read_status = handshakeIclassTag_ext(card_data, use_credit_key);
 		if ( startup_limit-- == 0 ) {
-			Dbprintf("Handshake status | %d (fail 10)", read_status);
+			Dbprintf("[-] Handshake status | %d (fail 10)", read_status);
 			isOK = 99;			
 			goto out;
 		}
 	};
+	// since handshakeIclassTag_ext call sends s readcheck,  we start with sending first response.
 		
 	// Keychunk loop
 	for (i = 0; i < keyCount; i++) {
-		
-		LED_C_INV();
 		
 		// Allow button press / usb cmd to interrupt device
 		if (BUTTON_PRESS() && !usb_poll_validate_length()) break;
 
 		WDT_HIT();
-
 		LED_B_ON();		
-		
-		// Auth Sequence MUST begin with reading e-purse. (block2)	
-		// Card selected, now read e-purse (cc) (block2) (only 8 bytes no CRC)		
-		ReaderTransmitIClass(readcheck_cc, sizeof(readcheck_cc));		
-		if (ReaderReceiveIClass(resp) == 8) {
-		}
-		
-		LED_B_OFF();
+	
 		// copy MAC to check command (readersignature)
 		check[5] = keys[i].mac[0];
 		check[6] = keys[i].mac[1];
@@ -2168,11 +2267,17 @@ void iClass_Authentication_fast(uint64_t arg0, uint64_t arg1, uint8_t *datain) {
 		check[8] = keys[i].mac[3];
 		
 		// expect 4bytes, 3 retries times..
-		isOK = sendCmdGetResponseWithRetries(check, sizeof(check), resp, 4, 2);
+		isOK = sendCmdGetResponseWithRetries(check, sizeof(check), resp, 4, 3);
 		if ( isOK )
 			goto out;
 			
-		SpinDelayUs(350);  //iClass (iso15693-2) should timeout after 330us.
+		SpinDelayUs(400);  //iClass (iso15693-2) should timeout after 330us.
+
+		// Auth Sequence MUST begin with reading e-purse. (block2)	
+		// Card selected, now read e-purse (cc) (block2) (only 8 bytes no CRC)		
+		ReaderTransmitIClass(readcheck_cc, sizeof(readcheck_cc));		
+		
+		LED_B_OFF();		
 	}
 	
 out:	
@@ -2188,38 +2293,37 @@ out:
 	LED_C_OFF();
 }
 
-bool iClass_ReadBlock(uint8_t blockNo, uint8_t *readdata) {
-	uint8_t readcmd[] = {ICLASS_CMD_READ_OR_IDENTIFY, blockNo, 0x00, 0x00}; //0x88, 0x00 // can i use 0C?
-	char bl = blockNo;
-	uint16_t crc = iclass_crc16(&bl, 1);
-	readcmd[2] = crc >> 8;
-	readcmd[3] = crc & 0xff;
-	uint8_t resp[] = {0,0,0,0,0,0,0,0,0,0};
-
-	bool isOK = sendCmdGetResponseWithRetries(readcmd, sizeof(readcmd), resp, 10, 5);
-	memcpy(readdata, resp, sizeof(resp));
+// Tries to read block.
+// retries 10times.
+bool iClass_ReadBlock(uint8_t blockNo, uint8_t *data, uint8_t len) {
+	uint8_t resp[10];
+	uint8_t cmd[] = {ICLASS_CMD_READ_OR_IDENTIFY, blockNo, 0x00, 0x00};
+	AddCrc( cmd+1, 1 );
+	// expect size 10,  retry 5times
+	bool isOK = sendCmdGetResponseWithRetries(cmd, sizeof(cmd), resp, 10, 5);
+	memcpy(data, resp, len);
 	return isOK;
 }
 
 // turn off afterwards
+// readblock 8 + 2.  only want 8.
 void iClass_ReadBlk(uint8_t blockno) {
-	uint8_t readblockdata[] = {0,0,0,0,0,0,0,0,0,0};
-	bool isOK = false;
-	isOK = iClass_ReadBlock(blockno, readblockdata);
-	cmd_send(CMD_ACK, isOK, 0, 0, readblockdata, 8);
+	uint8_t data[] = {0,0,0,0,0,0,0,0,0,0};
+	bool isOK = iClass_ReadBlock(blockno, data, sizeof(data));
+	cmd_send(CMD_ACK, isOK, 0, 0, data, sizeof(data));
 	switch_off(); 
 }
 
 // turn off afterwards
 void iClass_Dump(uint8_t blockno, uint8_t numblks) {
-	uint8_t readblockdata[] = {0,0,0,0,0,0,0,0,0,0};
+	uint8_t blockdata[] = {0,0,0,0,0,0,0,0,0,0};
 	bool isOK = false;
 	uint8_t blkCnt = 0;
 
 	BigBuf_free();
 	uint8_t *dataout = BigBuf_malloc(255*8);
 	if (dataout == NULL){
-		DbpString("out of memory");
+		DbpString("[!] out of memory");
 		OnError(1);
 		return;
 	}
@@ -2227,17 +2331,17 @@ void iClass_Dump(uint8_t blockno, uint8_t numblks) {
 	memset(dataout, 0xFF, 255*8);
 
 	for (;blkCnt < numblks; blkCnt++) {
-		isOK = iClass_ReadBlock(blockno + blkCnt, readblockdata);
+		isOK = iClass_ReadBlock(blockno + blkCnt, blockdata, sizeof(blockdata));
 		
 		// 0xBB is the internal debug separator byte..
-		if (!isOK || (readblockdata[0] == 0xBB || readblockdata[7] == 0xBB || readblockdata[2] == 0xBB)) { //try again
-			isOK = iClass_ReadBlock(blockno + blkCnt, readblockdata);
+		if (!isOK || (blockdata[0] == 0xBB || blockdata[7] == 0xBB || blockdata[2] == 0xBB)) { //try again
+			isOK = iClass_ReadBlock(blockno + blkCnt, blockdata, sizeof(blockdata));
 			if (!isOK) {
-				Dbprintf("Block %02X failed to read", blkCnt + blockno);
+				Dbprintf("[!] block %02X failed to read", blkCnt + blockno);
 				break;
 			}
 		}
-		memcpy(dataout + (blkCnt * 8), readblockdata, 8);
+		memcpy(dataout + (blkCnt * 8), blockdata, 8);
 	}
 	//return pointer to dump memory in arg3
 	cmd_send(CMD_ACK, isOK, blkCnt, BigBuf_max_traceLen(), 0, 0);
@@ -2246,13 +2350,11 @@ void iClass_Dump(uint8_t blockno, uint8_t numblks) {
 }
 
 bool iClass_WriteBlock_ext(uint8_t blockNo, uint8_t *data) {
+
+	uint8_t resp[] = {0,0,0,0,0,0,0,0,0,0};
 	uint8_t write[] = { ICLASS_CMD_UPDATE, blockNo, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 	memcpy(write+2, data, 12); // data + mac
-	char *wrCmd = (char *)(write+1); 
-	uint16_t crc = iclass_crc16(wrCmd, 13);
-	write[14] = crc >> 8;
-	write[15] = crc & 0xff;
-	uint8_t resp[] = {0,0,0,0,0,0,0,0,0,0};
+	AddCrc(write+1, 13);
 
 	bool isOK = sendCmdGetResponseWithRetries(write, sizeof(write), resp, sizeof(resp), 5);
 	if (isOK) { //if reader responded correctly
@@ -2260,7 +2362,7 @@ bool iClass_WriteBlock_ext(uint8_t blockNo, uint8_t *data) {
 		//if response is not equal to write values
 		if (memcmp(write + 2, resp, 8)) {
 
-		//if not programming key areas (note key blocks don't get programmed with actual key data it is xor data)
+			//if not programming key areas (note key blocks don't get programmed with actual key data it is xor data)
 			if (blockNo != 3 && blockNo != 4) {
 				isOK = sendCmdGetResponseWithRetries(write, sizeof(write), resp, sizeof(resp), 5);
 			} 			
@@ -2272,11 +2374,6 @@ bool iClass_WriteBlock_ext(uint8_t blockNo, uint8_t *data) {
 // turn off afterwards
 void iClass_WriteBlock(uint8_t blockNo, uint8_t *data) {
 	bool isOK = iClass_WriteBlock_ext(blockNo, data);
-	if (isOK)
-		Dbprintf("Write block [%02x] successful", blockNo);
-    else
-		Dbprintf("Write block [%02x] failed", blockNo);		
-	
 	cmd_send(CMD_ACK,isOK,0,0,0,0);
 	switch_off(); 
 }

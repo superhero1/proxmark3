@@ -17,9 +17,6 @@
 #include "elf.h"
 #include "proxendian.h"
 
-// FIXME: what the fuckity fuck
-unsigned int current_command = CMD_UNKNOWN;
-
 #define FLASH_START            0x100000
 #define FLASH_SIZE             (256*1024)
 #define FLASH_END              (FLASH_START + FLASH_SIZE)
@@ -116,7 +113,7 @@ static int build_segs_from_phdrs(flash_file_t *ctx, FILE *fd, Elf32_Phdr *phdrs,
 					uint32_t new_length = this_end - prev_seg->start;
 					uint32_t this_offset = paddr - prev_seg->start;
 					uint32_t hole = this_offset - prev_seg->length;
-					uint8_t *new_data = malloc(new_length);
+					uint8_t *new_data = calloc(new_length, sizeof(uint8_t));
 					if (!new_data) {
 						fprintf(stderr, "Out of memory\n");
 						free(data);
@@ -267,10 +264,8 @@ fail:
 // Get the state of the proxmark, backwards compatible
 static int get_proxmark_state(uint32_t *state)
 {
-	UsbCommand c;
-	c.cmd = CMD_DEVICE_INFO;
+	UsbCommand c = {CMD_DEVICE_INFO};
 	SendCommand(&c);
-
 	UsbCommand resp;
 	ReceiveCommand(&resp);
 
@@ -336,7 +331,7 @@ static int enter_bootloader(void)
 		msleep(1000);
 		while (!OpenProxmark(0)) {
 			msleep(1000);
-			fprintf(stderr, ".");
+			fprintf(stderr, "."); fflush(stdout);
 		}
 		fprintf(stderr," Found.\n");
 
@@ -449,7 +444,7 @@ int flash_write(flash_file_t *ctx)
 			baddr += block_size;
 			length -= block_size;
 			block++;
-			fprintf(stderr, ".");
+			fprintf(stderr, "."); fflush(stdout);
 		}
 		fprintf(stderr, " OK\n");
 	}

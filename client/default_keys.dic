@@ -543,3 +543,92 @@ AD4FB33388BF,
 160A91D29A9C,--Aperio KEY_A Sector 1, 12, 13, 14, 15 Data Start 0 Length 48
 #
 b7bf0c13066e,--Gallagher
+#
+# Boston, MA, USA Transit - MBTA Charlie Card
+3060206f5b0a,-- charlie
+5ec39b022f2b,-- charlie
+3a09594c8587,-- charlie
+f1b9f5669cc8,-- charlie
+f662248e7e89,-- charlie
+62387b8d250d,-- charlie
+f238d78ff48f,-- charlie
+9dc282d46217,-- charlie
+afd0ba94d624,-- charlie
+92ee4dc87191,-- charlie
+b35a0e4acc09,-- charlie
+756ef55e2507,-- charlie
+447ab7fd5a6b,-- charlie
+932b9cb730ef,-- charlie
+1f1a0a111b5b,-- charlie
+ad9e0a1ca2f7,-- charlie
+d58023ba2bdc,-- charlie
+62ced42a6d87,-- charlie
+2548a443df28,-- charlie
+2ed3b15e7c0f,-- charlie
+#
+# Data from forum
+6a1987c40a21
+7f33625bc129
+#
+60012e9ba3fa
+#
+de1fcbec764b
+# Data from https://pastebin.com/Kz8xp4ev
+2aa05ed1856f
+73068f118c13
+2b7f3253fac5
+eaac88e5dc99
+ae3d65a3dad4
+a73f5dc1d333   
+a82607b01c0d  
+2910989b6880  
+0f1c63013dba
+fbf225dc5d58
+#
+# Data  https://pastebin.com/BEm6bdAE
+# vingcard.txt
+4708111c8604
+3d50d902ea48
+96a301bce267
+6700f10fec09
+7a09cc1db70a
+560f7cff2d81
+66b31e64ca4b
+9e53491f685b
+3a09911d860c  
+8a036920ac0c
+361f69d2c462
+d9bcde7fc489
+0c03a720f208
+6018522fac02  
+#
+# Data from https://pastebin.com/4t2yFMgt
+# Mifare technische Universität Graz TUG
+D58660D1ACDE
+50A11381502C
+C01FC822C6E5
+0854BF31111E
+# More keys:
+8a19d40cf2b5
+ae8587108640
+#
+# Following keys were extracted from the ScanBadge Android app (fr.badgevigik.scanbadge)
+# Creators claims it should cover most Vigik vendors and implementations
+# Intratone, Comelit, Urmet, Hexact, Noralsy, Bitron, Bticino, CDVI, HID, Immotec, Aiphone
+4a4c474f524d
+444156494442
+434143445649
+434456495243
+a00002000021
+ef61a3d48e2a
+a23456789123
+010000000000
+363119000001
+a00003000084
+4143414f5250
+4243414f5250
+675a32413770
+395244733978
+a0004a000036
+2c9f3d45ba13
+dfe73be48ac6

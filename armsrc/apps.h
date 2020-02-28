@@ -30,6 +30,7 @@ extern "C" {
 #include "desfire.h"
 #include "iso14443b.h"
 #include "Standalone/standalone.h"
+#include "flashmem.h"
 
 extern const uint8_t OddByteParity[256];
 extern int rsamples;   // = 0;
@@ -51,9 +52,11 @@ void Dbhexdump(int len, uint8_t *d, bool bAsci);
 
 // ADC Vref = 3300mV, and an (10M+1M):1M voltage divider on the HF input can measure voltages up to 36300 mV
 #define MAX_ADC_HF_VOLTAGE 36300
+// ADC Vref = 3300mV,  (240k-10M):240k voltage divider,  140800 mV
+#define MAX_ADC_HF_VOLTAGE_RDV40 140800
 // ADC Vref = 3300mV, and an (10000k+240k):240k voltage divider on the LF input can measure voltages up to 140800 mV
 #define MAX_ADC_LF_VOLTAGE 140800
-int AvgAdc(int ch);
+uint16_t AvgAdc(int ch);
 
 void print_result(char *name, uint8_t *buf, size_t len);
 void PrintToSendBuffer(void);
@@ -110,16 +113,16 @@ void Cotag(uint32_t arg0);
 void SimulateIso14443bTag(uint32_t pupi);
 void AcquireRawAdcSamplesIso14443b(uint32_t parameter);
 void ReadSTMemoryIso14443b(uint8_t numofblocks);
-void RAMFUNC SnoopIso14443b(void);
+void RAMFUNC SniffIso14443b(void);
 void SendRawCommand14443B(uint32_t, uint32_t, uint8_t, uint8_t[]);
 void SendRawCommand14443B_Ex(UsbCommand *c);
-void AppendCrc14443b(uint8_t* data, int len);
 void ClearFpgaShiftingRegisters(void);
 
 // iso14443a.h
 void RAMFUNC SniffIso14443a(uint8_t param);
 void SimulateIso14443aTag(int tagType, int flags, uint8_t *data);
-void ReaderIso14443a(UsbCommand * c);
+void ReaderIso14443a(UsbCommand *c);
+
 // Also used in iclass.c
 //bool RAMFUNC LogTrace(const uint8_t *btBytes, uint16_t len, uint32_t timestamp_start, uint32_t timestamp_end, uint8_t *parity, bool readerToTag);
 void GetParity(const uint8_t *pbtCmd, uint16_t len, uint8_t *parity);
@@ -147,7 +150,7 @@ void MifareAcquireNonces(uint32_t arg0, uint32_t arg1, uint32_t flags, uint8_t *
 void MifareChkKeys(uint16_t arg0, uint8_t arg1, uint8_t arg2, uint8_t *datain);
 void MifareChkKeys_fast(uint32_t arg0, uint32_t arg1, uint32_t arg2, uint8_t *datain);
 void Mifare1ksim(uint8_t arg0, uint8_t arg1, uint8_t arg2, uint8_t *datain);
-void MifareSetDbgLvl(uint32_t arg0, uint32_t arg1, uint32_t arg2, uint8_t *datain);
+void MifareSetDbgLvl(uint16_t arg0);
 void MifareEMemClr(uint32_t arg0, uint32_t arg1, uint32_t arg2, uint8_t *datain);
 void MifareEMemSet(uint32_t arg0, uint32_t arg1, uint32_t arg2, uint8_t *datain);
 void MifareEMemGet(uint32_t arg0, uint32_t arg1, uint32_t arg2, uint8_t *datain);
@@ -162,7 +165,7 @@ void OnErrorMagic(uint8_t reason);
 
 int32_t dist_nt(uint32_t nt1, uint32_t nt2);
 void ReaderMifare(bool first_try, uint8_t block, uint8_t keytype );
-void RAMFUNC SniffMifare(uint8_t param);
+//void RAMFUNC SniffMifare(uint8_t param);
 
 //desfire
 void Mifare_DES_Auth1(uint8_t arg0,uint8_t *datain);
@@ -198,7 +201,6 @@ void ReaderIso15693(uint32_t parameter);	// Simulate an ISO15693 reader - greg
 void SimTagIso15693(uint32_t parameter, uint8_t *uid);	// simulate an ISO15693 tag - greg
 void BruteforceIso15693Afi(uint32_t speed); // find an AFI of a tag - atrox
 void DirectTag15693Command(uint32_t datalen,uint32_t speed, uint32_t recv, uint8_t *data); // send arbitrary commands from CLI - atrox 
-void SetDebugIso15693(uint32_t flag);
 void Iso15693InitReader(void);
 
 // iclass.h
@@ -206,12 +208,11 @@ void RAMFUNC SniffIClass(void);
 void SimulateIClass(uint32_t arg0, uint32_t arg1, uint32_t arg2, uint8_t *datain);
 void ReaderIClass(uint8_t arg0);
 void ReaderIClass_Replay(uint8_t arg0,uint8_t *MAC);
-void IClass_iso14443A_GetPublic(uint8_t arg0);
 void iClass_Authentication(uint8_t *MAC);
 void iClass_Authentication_fast(uint64_t arg0, uint64_t arg1, uint8_t *datain);
 void iClass_WriteBlock(uint8_t blockNo, uint8_t *data);
 void iClass_ReadBlk(uint8_t blockNo);
-bool iClass_ReadBlock(uint8_t blockNo, uint8_t *readdata);
+bool iClass_ReadBlock(uint8_t blockNo, uint8_t *data, uint8_t datalen);
 void iClass_Dump(uint8_t blockno, uint8_t numblks);
 void iClass_Clone(uint8_t startblock, uint8_t endblock, uint8_t *data);
 void iClass_ReadCheck(uint8_t blockNo, uint8_t keyType);
@@ -230,15 +231,17 @@ void check_challenges(bool file_given, byte_t* data);
 
 // cmd.h
 bool cmd_receive(UsbCommand* cmd);
-bool cmd_send(uint32_t cmd, uint32_t arg0, uint32_t arg1, uint32_t arg2, void* data, size_t len);
+bool cmd_send(uint64_t cmd, uint64_t arg0, uint64_t arg1, uint64_t arg2, void* data, size_t len);
 
 // util.h
 void HfSnoop(int , int);
 
 //felica.c
-extern void HfSnoopISO18(uint32_t samples, uint32_t triggers);
-extern void HfSimLite(uint64_t uid);
-extern void HfDumpFelicaLiteS();
+extern void felica_sendraw(UsbCommand *c);
+extern void felica_sniff(uint32_t samples, uint32_t triggers);
+extern void felica_sim_lite(uint64_t uid);
+extern void felica_dump_lite_s();
+
 
 #ifdef __cplusplus
 }

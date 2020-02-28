@@ -41,6 +41,13 @@
 #ifndef ON_DEVICE
 
 #include <inttypes.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <sys/stat.h>
+#include <stdarg.h>
+#include "../ui.h"
+
 /**
  * @brief Utility function to save data to a binary file. This method takes a preferred name, but if that
  * file already exists, it tries with another name until it finds something suitable.
@@ -75,14 +82,23 @@ extern int saveFileEML(const char *preferredName, const char *suffix, uint8_t* d
  */
 
 int fileExists(const char *filename);
-#endif //ON_DEVICE
 
-/**
+#define PrintAndLogDevice(level, format, args...)  PrintAndLogEx(level, format , ## args)
+#else 
+
+	/**
  * Utility function to print to console. This is used consistently within the library instead
  * of printf, but it actually only calls printf. The reason to have this method is to
  *make it simple to plug this library into proxmark, which has this function already to
  * write also to a logfile. When doing so, just point this function to use PrintAndLog
  * @param fmt
  */
-void prnlog(char *fmt, ...);
+#define PrintAndLogDevice(level, format, args...) { }
+
+	
+#endif //ON_DEVICE
+
+
+//void PrintAndLogDevice(logLevel_t level, char *fmt, ...);
+
 #endif // FILEUTILS_H

@@ -9,6 +9,9 @@
 //-----------------------------------------------------------------------------
 #include "util.h"
 
+// global client debug variable
+uint8_t g_debugMode = 0;
+
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -51,14 +54,17 @@ int ukbhit(void) {
 #endif
 
 // log files functions
-void AddLogLine(char *file, char *extData, char *c) {
+
+// open, appped and close logfile
+void AddLogLine(char *fn, char *data, char *c) {
 	FILE *f = NULL;
     char filename[FILE_PATH_SIZE] = {0x00};
     int len = 0;
 
-    len = strlen(file);
-    if (len > FILE_PATH_SIZE) len = FILE_PATH_SIZE;
-    memcpy(filename, file, len);
+    len = strlen(fn);
+    if (len > FILE_PATH_SIZE) 
+		len = FILE_PATH_SIZE;
+    memcpy(filename, fn, len);
    
 	f = fopen(filename, "a");
 	if (!f) {
@@ -66,44 +72,51 @@ void AddLogLine(char *file, char *extData, char *c) {
 		return;
 	}
 
-	fprintf(f, "%s", extData);
+	fprintf(f, "%s", data);
 	fprintf(f, "%s\n", c);
 	fflush(f);
 	fclose(f);
 }
 
-void AddLogHex(char *fileName, char *extData, const uint8_t * data, const size_t len){
-	AddLogLine(fileName, extData, sprint_hex(data, len));
+void AddLogHex(char *fn, char *extData, const uint8_t * data, const size_t len){
+	AddLogLine(fn, extData, sprint_hex(data, len));
 }
 
-void AddLogUint64(char *fileName, char *extData, const uint64_t data) {
+void AddLogUint64(char *fn, char *data, const uint64_t value) {
 	char buf[20] = {0};
 	memset(buf, 0x00, sizeof(buf));
-	sprintf(buf, "%016" PRIx64 "", data);
-	AddLogLine(fileName, extData, buf);
+	sprintf(buf, "%016" PRIx64 "", value);
+	AddLogLine(fn, data, buf);
 }
 
-void AddLogCurrentDT(char *fileName) {
+void AddLogCurrentDT(char *fn) {
 	char buf[20];
 	memset(buf, 0x00, sizeof(buf));
 	struct tm *curTime;
 	time_t now = time(0);
 	curTime = gmtime(&now);
 	strftime (buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", curTime);
-	AddLogLine(fileName, "\nanticollision: ", buf);
+	AddLogLine(fn, "\nanticollision: ", buf);
 }
 
-void FillFileNameByUID(char *fileName, uint8_t *uid, char *ext, int byteCount) {
-	if ( fileName == NULL || uid == NULL || ext == NULL ){
-		printf("error: parameter is NULL\n");
+// create filename on hex uid.
+// param *fn   -  pointer to filename char array
+// param *uid  -  pointer to uid byte array
+// param *ext  -  ".log"
+// param uidlen - length of uid array.
+void FillFileNameByUID(char *filenamePrefix, uint8_t *uid, const char *ext, int uidlen) {
+	if ( filenamePrefix == NULL || uid == NULL || ext == NULL ){
+		printf("[!] error parameter is NULL\n");
 		return;
 	}
-	char * fnameptr = fileName;
-	memset(fileName, 0x00, FILE_PATH_SIZE);
 	
-	for (int j = 0; j < byteCount; j++, fnameptr += 2)
-		sprintf(fnameptr, "%02X", uid[j]); 
-	sprintf(fnameptr, "%s", ext); 
+	int len=0;
+	len=strlen(filenamePrefix);
+	//memset(fn, 0x00, FILE_PATH_SIZE);
+	
+	for (int j = 0; j < uidlen; j++)
+		sprintf(filenamePrefix + len + j * 2, "%02X", uid[j]); 
+	strcat(filenamePrefix, ext); 
 }
 
 void hex_to_buffer(const uint8_t *buf, const uint8_t *hex_data, const size_t hex_len, const size_t hex_max_len, 
@@ -111,6 +124,7 @@ void hex_to_buffer(const uint8_t *buf, const uint8_t *hex_data, const size_t hex
 		
 	char *tmp = (char *)buf;
 	size_t i;
+	memset(tmp, 0x00, hex_max_len);
 
 	int maxLen = ( hex_len > hex_max_len) ? hex_max_len : hex_len;
 
@@ -132,7 +146,7 @@ void hex_to_buffer(const uint8_t *buf, const uint8_t *hex_data, const size_t hex
 }
 
 // printing and converting functions
-void print_hex(const uint8_t * data, const size_t len) {
+void print_hex(const uint8_t *data, const size_t len) {
 	size_t i;
 	for (i=0; i < len; i++)
 		printf("%02x ", data[i]);
@@ -140,7 +154,6 @@ void print_hex(const uint8_t * data, const size_t len) {
 }
 
 void print_hex_break(const uint8_t *data, const size_t len, uint8_t breaks) {
-
 	int rownum = 0;
 	printf("[%02d] | ", rownum);
 	for (int i = 0; i < len; ++i) {
@@ -158,23 +171,26 @@ void print_hex_break(const uint8_t *data, const size_t len, uint8_t breaks) {
 
 char *sprint_hex(const uint8_t *data, const size_t len) {
 	static char buf[1025] = {0};
-	
 	hex_to_buffer((uint8_t *)buf, data, len, sizeof(buf) - 1, 0, 1, true);
-
 	return buf;
 }
 
 char *sprint_hex_inrow_ex(const uint8_t *data, const size_t len, const size_t min_str_len) {
 	static char buf[1025] = {0};
-
 	hex_to_buffer((uint8_t *)buf, data, len, sizeof(buf) - 1, min_str_len, 0, true);
-
 	return buf;
 }
 
 char *sprint_hex_inrow(const uint8_t *data, const size_t len) {
 	return sprint_hex_inrow_ex(data, len, 0);
 }
+char *sprint_hex_inrow_spaces(const uint8_t *data, const size_t len, size_t spaces_between) {
+	static char buf[1025] = {0};
+	hex_to_buffer((uint8_t *)buf, data, len, sizeof(buf) - 1, 0, spaces_between, true);
+	return buf;
+}
+
+
 
 char *sprint_bin_break(const uint8_t *data, const size_t len, const uint8_t breaks) {
 	
@@ -294,14 +310,14 @@ char *sprint_ascii(const uint8_t *data, const size_t len) {
 }
 
 void print_blocks(uint32_t *data, size_t len) {
-	PrintAndLog("Blk | Data ");
-	PrintAndLog("----+------------");
+	PrintAndLogEx(NORMAL, "Blk | Data ");
+	PrintAndLogEx(NORMAL, "----+------------");
 
 	if ( !data ) {
-		PrintAndLog("..empty data");
+		PrintAndLogEx(ERR, "..empty data");
 	} else {
 		for (uint8_t i=0; i<len; i++)
-			PrintAndLog(" %02d | 0x%08X", i, data[i]);
+			PrintAndLogEx(NORMAL, "%02d | 0x%08X", i, data[i]);
 	}
 }
 
@@ -486,8 +502,7 @@ uint64_t param_get64ex(const char *line, int paramnum, int deflt, int base)
 		return deflt;
 }
 
-int param_gethex(const char *line, int paramnum, uint8_t * data, int hexcnt)
-{
+int param_gethex(const char *line, int paramnum, uint8_t * data, int hexcnt) {
 	int bg, en, i;
 	uint32_t temp;
 
@@ -498,7 +513,7 @@ int param_gethex(const char *line, int paramnum, uint8_t * data, int hexcnt)
 	if (en - bg + 1 != hexcnt) return 1;
 
 	for(i = 0; i < hexcnt; i += 2) {
-		if (!(isxdigit(line[bg + i]) && isxdigit(line[bg + i + 1])) )	return 1;
+		if (!(isxdigit(line[bg + i]) && isxdigit(line[bg + i + 1])) ) return 1;
 		
 		sscanf((char[]){line[bg + i], line[bg + i + 1], 0}, "%X", &temp);
 		data[i / 2] = temp & 0xff;
@@ -506,8 +521,7 @@ int param_gethex(const char *line, int paramnum, uint8_t * data, int hexcnt)
 
 	return 0;
 }
-int param_gethex_ex(const char *line, int paramnum, uint8_t * data, int *hexcnt)
-{
+int param_gethex_ex(const char *line, int paramnum, uint8_t * data, int *hexcnt) {
 	int bg, en, i;
 	uint32_t temp;
 
@@ -583,7 +597,7 @@ int param_getstr(const char *line, int paramnum, char * str, size_t buffersize)
 
 	// Prevent out of bounds errors
 	if (en - bg + 1 >= buffersize) {
-		printf("out of bounds error: want %d bytes have %u bytes\n", en - bg + 1 + 1, buffersize);
+		printf("out of bounds error: want %d bytes have %zu bytes\n", en - bg + 1 + 1, buffersize);
 		return 0;
 	}
 	
@@ -619,7 +633,7 @@ int hextobinarray(char *target, char *source)
         else if (x >= 'A' && x <= 'F')
             x -= 'A' - 10;
         else {
-        	printf("Discovered unknown character %c %d at idx %d of %s\n", x, x, source - start, start);
+        	printf("Discovered unknown character %c %d at idx %d of %s\n", x, x, (int16_t)(source - start), start);
             return 0;
         }
         // output
@@ -692,6 +706,15 @@ void wiegand_add_parity(uint8_t *target, uint8_t *source, uint8_t length)
     *(target)= GetParity(source + length / 2, ODD, length / 2);
 }
 
+// add HID parity to binary array: ODD prefix for 1st half of ID, EVEN suffix for 2nd half
+void wiegand_add_parity_swapped(uint8_t *target, uint8_t *source, uint8_t length)
+{
+    *(target++)= GetParity(source, ODD, length / 2);
+    memcpy(target, source, length);
+    target += length;
+    *(target)= GetParity(source + length / 2, EVEN, length / 2);
+}
+
 // xor two arrays together for len items.  The dst array contains the new xored values.
 void xor(unsigned char * dst, unsigned char * src, size_t len) {
    for( ; len > 0; len--,dst++,src++)
@@ -726,14 +749,37 @@ void rol(uint8_t *data, const size_t len){
     data[len-1] = first;
 }
 
-// Swap bit order on a uint32_t value.  Can be limited by nrbits just use say 8bits reversal
-// And clears the rest of the bits.
-uint32_t SwapBits(uint32_t value, int nrbits) {
-	uint32_t newvalue = 0;
-	for(int i = 0; i < nrbits; i++) {
-		newvalue ^= ((value >> i) & 1) << (nrbits - 1 - i);
-	}
-	return newvalue;
+/*
+uint8_t pw_rev_A(uint8_t b) {
+	b = (b & 0xF0) >> 4 | (b & 0x0F) << 4;
+	b = (b & 0xCC) >> 2 | (b & 0x33) << 2;
+	b = (b & 0xAA) >> 1 | (b & 0x55) << 1;
+	return b;
+}
+*/
+uint8_t reflect8(uint8_t b) {
+	return ((b * 0x80200802ULL) & 0x0884422110ULL) * 0x0101010101ULL >> 32;
+}
+uint16_t reflect16(uint16_t b) {
+    uint16_t v = 0;
+    v |= (b & 0x8000) >> 15; 
+    v |= (b & 0x4000) >> 13;
+    v |= (b & 0x2000) >> 11;
+    v |= (b & 0x1000) >> 9;
+    v |= (b & 0x0800) >> 7;
+    v |= (b & 0x0400) >> 5;
+    v |= (b & 0x0200) >> 3;
+    v |= (b & 0x0100) >> 1;
+
+    v |= (b & 0x0080) << 1;
+    v |= (b & 0x0040) << 3;
+    v |= (b & 0x0020) << 5;
+    v |= (b & 0x0010) << 7;
+    v |= (b & 0x0008) << 9;
+    v |= (b & 0x0004) << 11;
+    v |= (b & 0x0002) << 13;
+    v |= (b & 0x0001) << 15;
+    return v;
 }
 /*
  ref  http://www.csm.ornl.gov/~dunigan/crc.html

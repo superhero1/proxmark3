@@ -18,18 +18,16 @@
 
 #include "proxmark3.h"	// time_t
 #include "common.h"
-#include "cmdmain.h"
-#include "ui.h"
-#include "data.h"
-#include "util.h"
+#include "util.h"		// FILE_PATH_SIZE
+#include "ui.h"			// PrintAndLog...
 #include "crapto1/crapto1.h"
-#include "iso14443crc.h"
+#include "crc16.h"
 #include "protocols.h"
 #include "mifare.h"
 #include "mfkey.h"
 #include "util_posix.h"  // msclock
 
-#define NESTED_SECTOR_RETRY     10
+#define MIFARE_SECTOR_RETRY     10
 
 // mifare tracer flags
 #define TRACE_IDLE		 		0x00
@@ -98,7 +96,8 @@ extern int loadTraceCard(uint8_t *tuid, uint8_t uidlen);
 extern int saveTraceCard(void);
 extern int tryDecryptWord(uint32_t nt, uint32_t ar_enc, uint32_t at_enc, uint8_t *data, int len);
 
-extern bool detect_classic_prng(void);
+extern int detect_classic_prng(void);
 extern int detect_classic_nackbug(bool verbose);
 extern void detect_classic_magic(void);
+extern void mf_crypto1_decrypt(struct Crypto1State *pcs, uint8_t *data, int len, bool isEncrypted);
 #endif

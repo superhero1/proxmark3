@@ -20,7 +20,6 @@
 
 #include "proxmark3.h"
 #include "scripting.h"
-#include "data.h"
 #include "ui.h"
 #include "graph.h"
 #include "cmdparser.h"
@@ -82,13 +81,13 @@ int CmdScriptList(const char *Cmd) {
 
 	n = scandir(script_directory_path, &namelist, NULL, alphasort);
 	if (n == -1) {
-		PrintAndLog ("[-] Couldn't open the scripts-directory");
+		PrintAndLogEx(FAILED, "Couldn't open the scripts-directory");
 		return 1;
 	}
 
 	for (uint16_t i = 0; i < n; i++) {
 		if (str_ends_with(namelist[i]->d_name, ".lua"))
-			PrintAndLog("%-21s", namelist[i]->d_name);
+			PrintAndLogEx(NORMAL, "%-21s", namelist[i]->d_name);
 		free(namelist[i]);
 	}
 	free(namelist);
@@ -123,19 +122,20 @@ int CmdScriptRun(const char *Cmd) {
 
     int name_len = 0;
     int arg_len = 0;
-    sscanf(Cmd, "%127s%n %255[^\n\r]%n", script_name,&name_len, arguments, &arg_len);
+    sscanf(Cmd, "%127s%n %255[^\n\r]%n", script_name, &name_len, arguments, &arg_len);
 
     char *suffix = "";
-    if (!endsWith(script_name,".lua"))
+    if (!endsWith(script_name, ".lua")) {
         suffix = ".lua";
-
+	}
+	
 	char script_path[strlen(get_my_executable_directory()) + strlen(LUA_SCRIPTS_DIRECTORY) + strlen(script_name) + strlen(suffix) + 1];
 	strcpy(script_path, get_my_executable_directory());
 	strcat(script_path, LUA_SCRIPTS_DIRECTORY);
 	strcat(script_path, script_name);
 	strcat(script_path, suffix);
 
-    printf("[+] Executing: %s%s, args '%s'\n", script_name, suffix, arguments);
+    PrintAndLogEx(SUCCESS, "Executing: %s%s, args '%s'\n", script_name, suffix, arguments);
 
     // run the Lua script
     int error = luaL_loadfile(lua_state, script_path);
@@ -150,7 +150,7 @@ int CmdScriptRun(const char *Cmd) {
     {
         // the top of the stack should be the error string
         if (!lua_isstring(lua_state, lua_gettop(lua_state)))
-            printf("[-] Error - but no error (?!)");
+            PrintAndLogEx(FAILED, "Error - but no error (?!)");
 
         // get the top of the stack as the error and pop it off
         const char * str = lua_tostring(lua_state, lua_gettop(lua_state));
@@ -161,7 +161,7 @@ int CmdScriptRun(const char *Cmd) {
     //luaL_dofile(lua_state, buf);
     // close the Lua state
     lua_close(lua_state);
-    printf("\n[+] Finished\n");
+    PrintAndLogEx(SUCCESS, "\nFinished\n");
     return 0;
 }
 
@@ -191,6 +191,6 @@ int CmdScript(const char *Cmd) {
  * @return
  */
 int CmdHelp(const char * Cmd) {
-    PrintAndLog("This is a feature to run Lua-scripts. You can place lua-scripts within the scripts/-folder. ");
+    PrintAndLogEx(NORMAL, "This is a feature to run Lua-scripts. You can place lua-scripts within the scripts/-folder. ");
     return 0;
 }

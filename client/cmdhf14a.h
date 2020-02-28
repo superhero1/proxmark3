@@ -25,7 +25,6 @@
 #include "cmdparser.h"
 #include "cmdmain.h"
 #include "iso14443crc.h"
-#include "data.h"
 #include "mifare.h"
 #include "cmdhfmf.h"
 #include "cmdhfmfu.h"
@@ -48,14 +47,13 @@ extern int CmdHF14ASim(const char *Cmd);
 extern int CmdHF14ASniff(const char *Cmd);
 extern int CmdHF14ACmdRaw(const char *Cmd);
 extern int CmdHF14ACUIDs(const char *Cmd);
+extern int CmdHF14AAntiFuzz(const char *cmd);
 
 extern char* getTagInfo(uint8_t uid);
-extern void DropField();
-extern int ExchangeAPDU14a(uint8_t *datain, int datainlen, bool activateField, bool leaveSignalON, uint8_t *dataout, int maxdataoutlen, int *dataoutlen);
-
-											
+extern int ExchangeAPDU14a(uint8_t *datain, int datainlen, bool activateField, bool leaveSignalON, uint8_t *dataout, int maxdataoutlen, int *dataoutlen);									
 
 extern int usage_hf_14a_sim(void);
 extern int usage_hf_14a_sniff(void);
 extern int usage_hf_14a_raw(void);
+extern int usage_hf_14a_antifuzz(void);
 #endif

@@ -22,7 +22,7 @@ extern "C" {
 #include "apps.h"
 #include "util.h"
 #include "string.h"
-#include "iso14443crc.h"
+#include "crc16.h"
 #include "mifaresniff.h"
 #include "crapto1/crapto1.h"
 #include "mifareutil.h"
@@ -52,13 +52,14 @@ typedef struct {
 	uint8_t  *output;
 	uint8_t  *parity;
 } tDemod;
-
+/*
 typedef enum {
 	MOD_NOMOD = 0,
 	MOD_SECOND_HALF,
 	MOD_FIRST_HALF,
 	MOD_BOTH_HALVES
 	} Modulation_t;
+*/
 
 typedef struct {
 	enum {
@@ -84,12 +85,28 @@ typedef struct {
 	uint8_t *parity;
 } tUart;
 
-extern void GetParity(const uint8_t *pbtCmd, uint16_t len, uint8_t *par);
-extern void AppendCrc14443a(uint8_t *data, int len);
+#ifndef AddCrc14A
+# define	AddCrc14A(data, len)	compute_crc(CRC_14443_A, (data), (len), (data)+(len), (data)+(len)+1)
+#endif
 
-// iso14443a.h
+#ifndef AddCrc14B
+# define	AddCrc14B(data, len)	compute_crc(CRC_14443_B, (data), (len), (data)+(len), (data)+(len)+1)
+#endif
+
+extern void GetParity(const uint8_t *pbtCmd, uint16_t len, uint8_t *par);
+
+extern tDemod* GetDemod(void);
+extern void DemodReset(void);
+extern void DemodInit(uint8_t *data, uint8_t *parity);
+extern tUart* GetUart(void);
+extern void UartReset(void);
+extern void UartInit(uint8_t *data, uint8_t *parity);
+extern RAMFUNC bool MillerDecoding(uint8_t bit, uint32_t non_real_time);
+extern RAMFUNC int ManchesterDecoding(uint8_t bit, uint16_t offset, uint32_t non_real_time);
+
 extern void RAMFUNC SniffIso14443a(uint8_t param);
 extern void SimulateIso14443aTag(int tagType, int flags, uint8_t *data);
+extern void iso14443a_antifuzz(uint32_t flags);
 extern void ReaderIso14443a(UsbCommand *c);
 extern void ReaderTransmit(uint8_t *frame, uint16_t len, uint32_t *timing);
 extern void ReaderTransmitBitsPar(uint8_t *frame, uint16_t bits, uint8_t *par, uint32_t *timing);

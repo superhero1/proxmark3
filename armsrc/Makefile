@@ -12,7 +12,6 @@ APP_INCLUDES = apps.h
 #in the next section to remove that particular feature from compilation.
 # NO space,TABs after the "\" sign.  
 APP_CFLAGS = -DWITH_CRC \
-			 -DWITH_ISO18092 \
 			 -DON_DEVICE \
 			 -DWITH_LF \
 			 -DWITH_HITAG \
@@ -22,13 +21,16 @@ APP_CFLAGS = -DWITH_CRC \
 			 -DWITH_ISO14443a \
 			 -DWITH_ICLASS \
 			 -DWITH_FELICA \
+			 -DWITH_FLASH \
+			 -DWITH_SMARTCARD \
 			 -DWITH_HFSNOOP \
-			 -DWITH_HF_YOUNG \
+			 -DWITH_LF_SAMYRUN \
 			 -fno-strict-aliasing -ffunction-sections -fdata-sections
 
 ### IMPORTANT -  move the commented variable below this line
 #			 -DWITH_LCD \
 #			 -DWITH_EMV \
+#			 -DWITH_FPC \
 #
 # Standalone Mods
 #-------------------------------------------------------
@@ -44,15 +46,17 @@ APP_CFLAGS = -DWITH_CRC \
 SRC_LCD = fonts.c LCD.c
 SRC_LF = lfops.c hitag2.c hitagS.c lfsampling.c pcf7931.c lfdemod.c
 SRC_ISO15693 = iso15693.c iso15693tools.c
-#SRC_ISO14443a = iso14443a.c mifareutil.c mifarecmd.c mifaresniff.c epa.c mifaresim.c
-SRC_ISO14443a = iso14443a.c mifareutil.c mifarecmd.c mifaresniff.c epa.c
+#SRC_ISO14443a = iso14443a.c mifareutil.c mifarecmd.c epa.c mifaresim.c
+SRC_ISO14443a = iso14443a.c mifareutil.c mifarecmd.c epa.c 
 SRC_ISO14443b = iso14443b.c
 SRC_FELICA = felica.c
 SRC_CRAPTO1 = crypto1.c des.c aes.c desfire_key.c desfire_crypto.c mifaredesfire.c
-SRC_CRC = iso14443crc.c crc.c crc16.c crc32.c 
+SRC_CRC = crc.c crc16.c crc32.c 
 SRC_ICLASS = iclass.c optimized_cipher.c
-SRC_LEGIC = legicrf.c legic_prng.c
-SRC_FLASH = flash.c
+SRC_LEGIC = legicrf.c legicrfsim.c legic_prng.c
+SRC_FLASH = flashmem.c
+SRC_SMARTCARD = i2c.c
+#SRC_FPC = usart.c
 SRC_BEE = bee.c
 
 #the FPGA bitstream files. Note: order matters!
@@ -77,6 +81,9 @@ THUMBSRC = start.c \
 	$(SRC_LF) \
 	$(SRC_ZLIB) \
 	$(SRC_LEGIC) \
+	$(SRC_FLASH) \
+	$(SRC_SMARTCARD) \
+	$(SRC_FPC) \
 	appmain.c \
 	printf.c \
 	util.c \
@@ -99,11 +106,15 @@ ARMSRC = fpgaloader.c \
 	parity.c \
 	usb_cdc.c \
 	cmd.c \
-	hf_young.c
+	lf_samyrun.c \
+    vtsend.c 
 	#	lf_samyrun.c \
 	#	lf_hidbrute.c \
 	#	lf_proxbrute.c \
+	#	hf_mattyrun.c \
 	
+VERSIONSRC = version.c \
+	fpga_version_info.c
 	
 # Do not move this inclusion before the definition of {THUMB,ASM,ARM}SRC
 include ../common/Makefile.common
@@ -116,6 +127,14 @@ FPGA_COMPRESSOR = ../client/fpga_compress
 all: $(OBJS)
 
 .DELETE_ON_ERROR:
+
+# version.c should be remade on every compilation
+.PHONY: version.c
+version.c: default_version.c
+	perl ../tools/mkversion.pl .. > $@ || $(COPY) $^ $@ 
+
+fpga_version_info.c: $(FPGA_BITSTREAMS) $(FPGA_COMPRESSOR)
+	$(FPGA_COMPRESSOR) -v $(filter %.bit,$^) $@
 
 $(OBJDIR)/fpga_all.o: $(OBJDIR)/fpga_all.bit.z
 	$(OBJCOPY) -O elf32-littlearm -I binary -B arm --prefix-sections=fpga_all_bit $^ $@

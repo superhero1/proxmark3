@@ -1,22 +1,22 @@
 //-----------------------------------------------------------------------------
-// Copyright (C) 2010 iZsh <izsh at fail0verflow.com>
+// Matías A. Ré Medina 2016
+// Christian Herrmann, 2018
 //
 // This code is licensed to you under the terms of the GNU GPL, version 2 or,
 // at your option, any later version. See the LICENSE.txt file for the text of
 // the license.
 //-----------------------------------------------------------------------------
-// Data utilities
+// StandAlone Mod
 //-----------------------------------------------------------------------------
 
-#ifndef DATA_H__
-#define DATA_H__
-#include <stdint.h>
-#include <stdbool.h>
-#include "util.h"
+#ifndef __HF_MATTYRUN_H
+#define __HF_MATTYRUN_H
 
-#define FILE_PATH_SIZE 1000												
+//#include <stdbool.h> // for bool
+#include "standalone.h" // standalone definitions
+#include "apps.h" // debugstatements, lfops?
 
-extern uint8_t* sample_buf;
-extern void GetFromBigBuf(uint8_t *dest, int bytes, int start_index);
-extern bool GetEMLFromBigBuf(uint8_t *dest, uint32_t bytes, uint32_t start_index);
-#endif
+
+#define OPTS 2
+
+#endif /* __HF_MATTYRUN_H */

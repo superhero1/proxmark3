@@ -20,7 +20,6 @@
 #include <string.h>   // also included in util.h
 #include <inttypes.h>
 #include <limits.h>   // for CmdNorm INT_MIN && INT_MAX
-#include "data.h"     // also included in util.h
 #include "util.h"
 #include "cmdmain.h"
 #include "proxmark3.h"	// sendcommand
@@ -93,8 +92,9 @@ int CmdDataIIR(const char *Cmd);
 #define BIGBUF_SIZE 40000
 extern uint8_t DemodBuffer[MAX_DEMOD_BUF_LEN];
 extern size_t DemodBufferLen;
-extern int g_DemodStartIdx;
+
 extern int g_DemodClock;
+extern size_t g_DemodStartIdx;
 extern uint8_t g_debugMode;
 
 #endif

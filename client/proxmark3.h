@@ -16,6 +16,7 @@
 #include "cmdscript.h"  // CmdScriptRun  
 
 #define PROXPROMPT "pm3 --> "
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -23,7 +24,7 @@ extern "C" {
 void SendCommand(UsbCommand *c);
 const char *get_my_executable_path(void);
 const char *get_my_executable_directory(void);
-void main_loop(char *script_cmds_file, char *script_cmd, bool usb_present);
+void main_loop(char *script_cmds_file, char *script_cmd, bool usb_present, bool stayInCommandLoop);
 
 bool hookUpPM3(void);
 void *uart_receiver(void *targ);

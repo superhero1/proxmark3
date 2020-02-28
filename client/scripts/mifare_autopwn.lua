@@ -1,5 +1,5 @@
 local getopt = require('getopt')
-local reader = require('read14a')
+local lib14a = require('read14a')
 local cmds = require('commands')
 local utils = require('utils')
 
@@ -61,7 +61,7 @@ end
 -- @return if unsuccessfull : nil, error
 local function wait_for_mifare()
 	while not core.ukbhit() do
-		res, err = reader.read1443a()
+		res, err = lib14a.read()
 		if res then return res end
 		-- err means that there was no response from card
 	end
@@ -110,15 +110,15 @@ end
 --
 -- performs a test if tag nonce uses weak or hardend prng
 local function perform_prng_test()
-
 	local isweak = core.detect_prng()
 	if isweak == 1 then
 		dbg('PRNG detection : WEAK nonce detected')
-		return true
+	elseif isweak == 0 then
+		dbg('PRNG detection : HARDEND nonce detected')
+	else
+		dbg('PRNG detection : failed')	
 	end
-
-	dbg('PRNG detection : HARDEND nonce detected')
-	return false
+	return isweak
 end
 --- 
 -- The main entry point
@@ -151,7 +151,7 @@ local function main(args)
 			seen_uids[uid] = uid
 			
 			-- check if PRNG is WEAK
-			if perform_prng_test() then  
+			if perform_prng_test() == 1 then  
 				print("Card found, commencing crack on UID", uid)
 
 				if #key == 12 then

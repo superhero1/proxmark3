@@ -19,7 +19,7 @@ Default LF config is set to:
 sample_config config = { 1, 8, 1, 95, 0 } ;
 
 void printConfig() {
-	Dbprintf("LF Sampling config:");
+	Dbprintf("LF Sampling config");
 	Dbprintf("  [q] divisor.............%d (%d KHz)", config.divisor, 12000 / (config.divisor+1));
 	Dbprintf("  [b] bps.................%d", config.bits_per_sample);
 	Dbprintf("  [d] decimation..........%d", config.decimation);
@@ -116,7 +116,7 @@ void LFSetupFPGAForADC(int divisor, bool lf_field) {
  * @param silent - is true, now outputs are made. If false, dbprints the status
  * @return the number of bits occupied by the samples.
  */
-uint32_t DoAcquisition(uint8_t decimation, uint32_t bits_per_sample, bool averaging, int trigger_threshold, bool silent, int bufsize) {
+uint32_t DoAcquisition(uint8_t decimation, uint32_t bits_per_sample, bool averaging, int trigger_threshold, bool silent, int bufsize, uint32_t cancel_after) {
 	//bigbuf, to hold the aquired raw data signal
 	uint8_t *dest = BigBuf_get_addr();
     bufsize = (bufsize > 0 && bufsize < BigBuf_max_traceLen()) ? bufsize : BigBuf_max_traceLen();
@@ -135,8 +135,9 @@ uint32_t DoAcquisition(uint8_t decimation, uint32_t bits_per_sample, bool averag
 	uint32_t sample_sum =0 ;
 	uint32_t sample_total_numbers = 0;
 	uint32_t sample_total_saved = 0;
-
-	while(!BUTTON_PRESS() && !usb_poll_validate_length() ) {
+	uint32_t cancel_counter = 0;
+	
+	while (!BUTTON_PRESS() && !usb_poll_validate_length() ) {
 		WDT_HIT();
 		if (AT91C_BASE_SSC->SSC_SR & AT91C_SSC_TXRDY) {
 			AT91C_BASE_SSC->SSC_THR = 0x43;
@@ -146,9 +147,15 @@ uint32_t DoAcquisition(uint8_t decimation, uint32_t bits_per_sample, bool averag
 			sample = (uint8_t)AT91C_BASE_SSC->SSC_RHR;
 			LED_D_OFF();
 			// threshold either high or low values 128 = center 0.  if trigger = 178 
-			if ((trigger_threshold > 0) && (sample < (trigger_threshold+128)) && (sample > (128-trigger_threshold))) // 
+			if ((trigger_threshold > 0) && (sample < (trigger_threshold + 128)) && (sample > (128 - trigger_threshold))) {
+				if (cancel_after > 0) {
+					cancel_counter++;
+					if (cancel_after == cancel_counter)
+						break;
+				}
 				continue;
-
+			}
+			
 			trigger_threshold = 0;
 			sample_total_numbers++;
 
@@ -191,10 +198,14 @@ uint32_t DoAcquisition(uint8_t decimation, uint32_t bits_per_sample, bool averag
 	}
 
 	if (!silent) {
-		Dbprintf("Done, saved %d out of %d seen samples at %d bits/sample",sample_total_saved, sample_total_numbers,bits_per_sample);
+		Dbprintf("Done, saved %d out of %d seen samples at %d bits/sample", sample_total_saved, sample_total_numbers, bits_per_sample);
 		Dbprintf("buffer samples: %02x %02x %02x %02x %02x %02x %02x %02x ...",
 					dest[0], dest[1], dest[2], dest[3], dest[4], dest[5], dest[6], dest[7]);
 	}
+
+	// Ensure that noise check is performed for any device-side processing
+	justNoise(dest, bufsize);
+	
 	return data.numbits;
 }
 /**
@@ -206,7 +217,7 @@ uint32_t DoAcquisition(uint8_t decimation, uint32_t bits_per_sample, bool averag
  * @return number of bits sampled
  */
 uint32_t DoAcquisition_default(int trigger_threshold, bool silent) {
-	return DoAcquisition(1, 8, 0,trigger_threshold, silent, 0);
+	return DoAcquisition(1, 8, 0,trigger_threshold, silent, 0, 0);
 }
 uint32_t DoAcquisition_config( bool silent, int sample_size) {
 	return DoAcquisition(config.decimation
@@ -214,11 +225,12 @@ uint32_t DoAcquisition_config( bool silent, int sample_size) {
 				  ,config.averaging
 				  ,config.trigger_threshold
 				  ,silent
-				  ,sample_size);
+				  ,sample_size
+				  ,0);
 }
 
-uint32_t DoPartialAcquisition(int trigger_threshold, bool silent, int sample_size) {
-	return DoAcquisition(1, 8, 0, trigger_threshold, silent, sample_size);
+uint32_t DoPartialAcquisition(int trigger_threshold, bool silent, int sample_size, uint32_t cancel_after) {
+	return DoAcquisition(1, 8, 0, trigger_threshold, silent, sample_size, cancel_after);
 }
 
 uint32_t ReadLF(bool activeField, bool silent, int sample_size) {
@@ -250,7 +262,7 @@ uint32_t SnoopLF() {
 }
 
 /**
-* acquisition of T55x7 LF signal. Similart to other LF, but adjusted with @marshmellows thresholds
+* acquisition of T55x7 LF signal. Similar to other LF, but adjusted with @marshmellows thresholds
 * the data is collected in BigBuf.
 **/
 void doT55x7Acquisition(size_t sample_size) {
@@ -336,8 +348,9 @@ void doCotagAcquisition(size_t sample_size) {
 	dest[0] = 0;	
 	uint8_t sample = 0, firsthigh = 0, firstlow = 0; 
 	uint16_t i = 0;
-
-	while (!BUTTON_PRESS() && !usb_poll_validate_length() && (i < bufsize) ) {
+	uint16_t noise_counter = 0;
+	
+	while (!BUTTON_PRESS() && !usb_poll_validate_length() && (i < bufsize) && (noise_counter < (COTAG_T1 << 1)) ) {
 		WDT_HIT();		
 		if (AT91C_BASE_SSC->SSC_SR & AT91C_SSC_TXRDY) {
 			AT91C_BASE_SSC->SSC_THR = 0x43;
@@ -350,13 +363,19 @@ void doCotagAcquisition(size_t sample_size) {
 		
 			// find first peak
 			if ( !firsthigh ) {
-				if (sample < COTAG_ONE_THRESHOLD) 
+				if (sample < COTAG_ONE_THRESHOLD) {
+					noise_counter++;
 					continue;
+				}
+				noise_counter = 0;
 				firsthigh = 1;
 			}
 			if ( !firstlow ){
-				if (sample > COTAG_ZERO_THRESHOLD )
+				if (sample > COTAG_ZERO_THRESHOLD ) {
+					noise_counter++;
 					continue;
+				}
+				noise_counter = 0;
 				firstlow = 1;
 			}
 

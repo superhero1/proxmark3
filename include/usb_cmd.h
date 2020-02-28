@@ -67,6 +67,26 @@ typedef struct{
 #define CMD_DOWNLOAD_EML_BIGBUF											  0x0110
 #define CMD_DOWNLOADED_EML_BIGBUF										  0x0111
 
+// RDV40, Flash memory operations
+#define CMD_READ_FLASH_MEM												  0x0120
+#define CMD_WRITE_FLASH_MEM												  0x0121
+#define CMD_WIPE_FLASH_MEM												  0x0122
+#define CMD_DOWNLOAND_FLASH_MEM											  0x0123
+#define CMD_DOWNLOADED_FLASHMEM											  0x0124
+#define CMD_INFO_FLASH_MEM												  0x0125
+
+// RDV40,  Smart card operations
+#define CMD_SMART_RAW													  0x0140
+#define CMD_SMART_UPGRADE												  0x0141
+#define CMD_SMART_UPLOAD												  0x0142
+#define CMD_SMART_ATR													  0x0143
+#define CMD_SMART_SETBAUD												  0x0144
+#define CMD_SMART_SETCLOCK												  0x0145
+
+// RDV40,  FPC serial
+#define CMD_FPC_SEND													  0x0160
+#define CMD_FPC_READ													  0x0161
+
 // For low-frequency tags
 #define CMD_READ_TI_TYPE                                                  0x0202
 #define CMD_WRITE_TI_TYPE                                                 0x0203
@@ -119,7 +139,6 @@ typedef struct{
 #define CMD_ISO_15693_COMMAND                                             0x0313
 #define CMD_ISO_15693_COMMAND_DONE                                        0x0314
 #define CMD_ISO_15693_FIND_AFI                                            0x0315
-#define CMD_ISO_15693_DEBUG                                               0x0316
 #define CMD_LF_SNOOP_RAW_ADC_SAMPLES                                      0x0317
 
 // For Hitag2 transponders
@@ -134,7 +153,7 @@ typedef struct{
 #define CMD_WR_HITAG_S													  0x0375
 #define CMD_EMU_HITAG_S													  0x0376
 
-
+#define CMD_ANTIFUZZ_ISO_14443a											  0x0380
 #define CMD_SIMULATE_TAG_ISO_14443B                                       0x0381
 #define CMD_SNOOP_ISO_14443B                                              0x0382
 
@@ -266,6 +285,13 @@ typedef struct{
 #define FLAG_ICLASS_READER_AIA			0x10
 #define FLAG_ICLASS_READER_ONE_TRY      0x20
 #define FLAG_ICLASS_READER_CEDITKEY     0x40
+
+// Dbprintf flags
+#define FLAG_RAWPRINT 0x0111
+#define FLAG_NOOPT 0x0000
+#define FLAG_NOLOG 0x0001
+#define FLAG_NONEWLINE 0x0010
+#define FLAG_NOPROMPT 0x0100
 
 // CMD_DEVICE_INFO response packet has flags in arg[0], flag definitions:
 /* Whether a bootloader that understands the common_area is present */

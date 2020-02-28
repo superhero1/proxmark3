@@ -18,13 +18,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
-#include "data.h"
 #include "ui.h"			// PrintAndLog
 
 #ifdef ANDROID
   #include <endian.h>
 #endif
-
 
 #ifndef BITMASK
 # define BITMASK(X) (1 << (X))
@@ -139,17 +137,55 @@
 #endif
 
 #if defined(__linux__)	|| (__APPLE__)
-# define BLUE_MSG(s) "\e[34m(s)\e[0m"
+# define _BLUE_(s) "\x1b[34m" #s "\x1b[0m "
 #else
-# define BLUE_MSG(s) "(s)"
+# define _BLUE_(s) #s " "
 #endif
+
+#if defined(__linux__)	|| (__APPLE__)
+# define _RED_(s) "\x1b[31m" #s "\x1b[0m "
+#else
+# define _RED_(s) #s " "
+#endif
+
+#if defined(__linux__)	|| (__APPLE__)
+# define _GREEN_(s) "\x1b[32m" #s "\x1b[0m "
+#else
+# define _GREEN_(s) #s " "
+#endif
+
+#if defined(__linux__)	|| (__APPLE__)
+# define _YELLOW_(s) "\x1b[33m" #s "\x1b[0m "
+#else
+# define _YELLOW_(s) #s " "
+#endif
+
+#if defined(__linux__)	|| (__APPLE__)
+# define _MAGENTA_(s) "\x1b[35m" #s "\x1b[0m "
+#else
+# define _MAGENTA_(s) #s " "
+#endif
+
+#if defined(__linux__)	|| (__APPLE__)
+# define _CYAN_(s) "\x1b[36m" #s "\x1b[0m "
+#else
+# define _CYAN_(s) #s " "
+#endif
+
+#ifndef DropField
+#define DropField() { \
+	UsbCommand c = {CMD_READER_ISO_14443a, {0,0,0}}; clearCommandBuffer(); SendCommand(&c); \
+}
+#endif
+
+extern uint8_t g_debugMode;
 
 extern int ukbhit(void);
 extern void AddLogLine(char *fileName, char *extData, char *c);
 extern void AddLogHex(char *fileName, char *extData, const uint8_t * data, const size_t len);
 extern void AddLogUint64(char *fileName, char *extData, const uint64_t data);
 extern void AddLogCurrentDT(char *fileName);
-extern void FillFileNameByUID(char *fileName, uint8_t * uid, char *ext, int byteCount);
+extern void FillFileNameByUID(char *filenamePrefix, uint8_t * uid, const char *ext, int uidlen);
 
 extern void hex_to_buffer(const uint8_t *buf, const uint8_t *hex_data, const size_t hex_len, 
 						  const size_t hex_max_len, const size_t min_str_len, const size_t spaces_between,
@@ -160,6 +196,7 @@ extern void print_hex_break(const uint8_t *data, const size_t len, const uint8_t
 extern char *sprint_hex(const uint8_t * data, const size_t len);
 extern char *sprint_hex_inrow(const uint8_t *data, const size_t len);
 extern char *sprint_hex_inrow_ex(const uint8_t *data, const size_t len, const size_t min_str_len);
+extern char *sprint_hex_inrow_spaces(const uint8_t *data, const size_t len, size_t spaces_between);
 extern char *sprint_bin(const uint8_t * data, const size_t len);
 extern char *sprint_bin_break(const uint8_t *data, const size_t len, const uint8_t breaks);
 extern char *sprint_hex_ascii(const uint8_t *data, const size_t len);
@@ -196,14 +233,16 @@ extern int binarraytohex( char *target,  char *source,  int length);
 extern void binarraytobinstring(char *target,  char *source,  int length);
 extern uint8_t GetParity( uint8_t *string, uint8_t type,  int length);
 extern void wiegand_add_parity(uint8_t *target, uint8_t *source, uint8_t length);
+extern void wiegand_add_parity_swapped(uint8_t *target, uint8_t *source, uint8_t length);
 
 extern void xor(unsigned char * dst, unsigned char * src, size_t len);
 extern int32_t le24toh (uint8_t data[3]);
 
 extern uint32_t PackBits(uint8_t start, uint8_t len, uint8_t* bits);
 extern void rol(uint8_t *data, const size_t len);
-extern uint32_t SwapBits(uint32_t value, int nrbits);
 extern uint32_t reflect(uint32_t v, int b);
+extern uint8_t reflect8(uint8_t b);		// dedicated 8bit reversal
+extern uint16_t reflect16(uint16_t b);	// dedicated 16bit reversal
 extern uint64_t HornerScheme(uint64_t num, uint64_t divider, uint64_t factor);
 
 extern int num_CPUs(void);			// number of logical CPUs

@@ -372,25 +372,35 @@ static const char StrManufacturer[] = {
   'p',0,'r',0,'o',0,'x',0,'m',0,'a',0,'r',0,'k',0,'.',0,'o',0,'r',0,'g',0,
 };
 
+// Note: This matches upstream proxmark3 USB descriptors.
 static const char StrProduct[] = {
-	22,			// Length
+	20,		// Length
 	0x03,		// Type is string
-	'P',0,'M',0,'3',0,' ',0,'D',0,'e',0,'v',0,'i',0,'c',0,'e',0
+	'p', 0,
+	'r', 0,
+	'o', 0,
+	'x', 0,
+	'm', 0,
+	'a', 0,
+	'r', 0,
+	'k', 0,
+	'3', 0
 };
 
 static const char StrSerialNumber[] = {
-	8,			// Length
+	10,		// Length
 	0x03,		// Type is string
-	'8',0,
-	'8',0,
-	'8',0
+	'8', 0,
+	'8', 0,
+	'8', 0,
+	'8', 0,
 };
 
-// size inkluderar sitt egna fält.
+// size includes their own field.
 static const char StrMS_OSDescriptor[] = {
-    18,			// length 0x12
+	18,		// length 0x12
 	0x03,		// Type is string
-    'M',0,'S',0,'F',0,'T',0,'1',0,'0',0,'0',0,MS_VENDOR_CODE,0
+	'M',0,'S',0,'F',0,'T',0,'1',0,'0',0,'0',0,MS_VENDOR_CODE,0
 };
 
 const char* getStringDescriptor(uint8_t idx) {
@@ -489,7 +499,7 @@ void usb_enable() {
 
 	// Specific Chip USB Initialisation
 	// Enables the 48MHz USB clock UDPCK and System Peripheral USB Clock
-	AT91C_BASE_PMC->PMC_SCER = AT91C_PMC_UDP;
+	AT91C_BASE_PMC->PMC_SCER |= AT91C_PMC_UDP;
 	AT91C_BASE_PMC->PMC_PCER = (1 << AT91C_ID_UDP);
 	
 	AT91C_BASE_UDP->UDP_FADDR = 0;
@@ -792,6 +802,7 @@ void AT91F_CDC_Enumerate() {
 	UDP_CLEAR_EP_FLAGS(AT91C_EP_CONTROL, AT91C_UDP_RXSETUP);
 	while ( (pUdp->UDP_CSR[AT91C_EP_CONTROL] & AT91C_UDP_RXSETUP)  );
 
+	/*
 	if ( bRequest == MS_VENDOR_CODE) {
 		if ( bmRequestType == MS_WCID_GET_DESCRIPTOR ) { // C0
 			if ( wIndex == MS_EXTENDED_COMPAT_ID ) {  // 4
@@ -799,6 +810,7 @@ void AT91F_CDC_Enumerate() {
 				//return;
 			} 
 		}
+
 		if ( bmRequestType == MS_WCID_GET_FEATURE_DESCRIPTOR ) {  //C1
 			// if ( wIndex == MS_EXTENDED_PROPERTIES ) { // 5  - winusb bug with wIndex == interface index,  so I just send it always)
 				//AT91F_USB_SendData(pUdp, OSprop, MIN(sizeof(OSprop), wLength));
@@ -806,6 +818,8 @@ void AT91F_CDC_Enumerate() {
 			// } 
 		}
 	}
+	*/
+	
 	// Handle supported standard device request Cf Table 9-3 in USB specification Rev 1.1
 	switch ((bRequest << 8) | bmRequestType) {
 	case STD_GET_DESCRIPTOR: {
@@ -926,7 +940,7 @@ void AT91F_CDC_Enumerate() {
 		for ( i = 0 ; i < 7 ; i++ )  {  
 			((uint8_t*)&line)[i] =  pUdp->UDP_FDR[AT91C_EP_CONTROL];
 		}  */
-		// ignor SET_LINE_CODING...
+		// ignore SET_LINE_CODING...
 		while ( !(pUdp->UDP_CSR[AT91C_EP_CONTROL] & AT91C_UDP_RX_DATA_BK0) );
 		UDP_CLEAR_EP_FLAGS(AT91C_EP_CONTROL, AT91C_UDP_RX_DATA_BK0);
 		AT91F_USB_SendZlp(pUdp);

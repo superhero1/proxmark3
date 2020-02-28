@@ -178,11 +178,17 @@ ISO 7816-4 Basic interindustry commands. For command APDU's.
 #define MIFARE_ULEV1_CHECKTEAR	0x3E
 #define MIFARE_ULEV1_VCSL		0x4B
 
+// New Mifare UL Nano commands.  Ref:: (https://www.nxp.com/docs/en/data-sheet/MF0UN_H_00.pdf)
+#define MIFARE_ULNANO_WRITESIG	0xA9
+#define MIFARE_ULNANO_LOCKSIF	0xAC
+
 // mifare 4bit card answers
 #define CARD_ACK      0x0A  // 1010 - ACK
+#define CARD_NACK_IV  0x00	// 0000 - NACK, invalid argument (invalid page address)
+#define CARD_NACK_PA  0x01	// 0001 - NACK, parity / crc error
 #define CARD_NACK_NA  0x04  // 0100 - NACK, not allowed (command not allowed)
 #define CARD_NACK_TR  0x05  // 0101 - NACK, transmission error
-
+#define CARD_NACK_EE  0x07	// 0111 - NACK, EEPROM write error
 
 // Magic Generation 1, parameter "work flags"
 // bit 0 - need get UID
@@ -258,16 +264,17 @@ ISO 7816-4 Basic interindustry commands. For command APDU's.
 #define TOPAZ_WRITE_NE8					0x1B	// Write-no-erase (eight bytes)
 
 
-// Definetions of which protocol annotations there are available
-#define ISO_14443A	0
-#define ICLASS		1
-#define ISO_14443B	2
-#define TOPAZ		3
-#define ISO_7816_4  4
-#define MFDES		5
-#define LEGIC		6
-#define ISO_15693	7
-#define FELICA		8
+// Definitions of which protocol annotations there are available
+#define ISO_14443A	 0
+#define ICLASS		 1
+#define ISO_14443B	 2
+#define TOPAZ		 3
+#define ISO_7816_4   4
+#define MFDES		 5
+#define LEGIC		 6
+#define ISO_15693	 7
+#define FELICA		 8
+#define PROTO_MIFARE 9
 
 //-- Picopass fuses
 #define FUSE_FPERS   0x80
@@ -437,10 +444,7 @@ uint32_t GetT55xxClockBit(uint32_t clock);
 #define EM4x05_READER_TALK_FIRST      1<<24
 
 
-
-#define FLITE_SERVICE_RO 0x000B
-#define FLITE_SERVICE_RW 0x0009
-
+// FeliCa protocol
 #define FELICA_POLL_REQ 0x00
 #define FELICA_POLL_ACK 0x01
 
@@ -496,6 +500,46 @@ uint32_t GetT55xxClockBit(uint32_t clock);
 
 #define FELICA_UPDATE_RNDID_REQ 0x4C
 #define FELICA_UPDATE_RNDID_ACK 0x4D
+
+// FeliCa SYSTEM list
+#define SYSTEMCODE_ANY  		0xffff // ANY
+#define SYSTEMCODE_FELICA_LITE 	0x88b4 // FeliCa Lite
+#define SYSTEMCODE_COMMON 		0xfe00 // Common
+#define SYSTEMCODE_EDY			0xfe00 // Edy
+#define SYSTEMCODE_CYBERNE		0x0003 // Cyberne
+#define SYSTEMCODE_SUICA		0x0003 // Suica
+#define SYSTEMCODE_PASMO		0x0003 // Pasmo
+    
+//FeliCa Service list Suica/pasmo (little endian)
+#define SERVICE_SUICA_INOUT				0x108f // SUICA/PASMO
+#define SERVICE_SUICA_HISTORY			0x090f // SUICA/PASMO
+#define SERVICE_FELICA_LITE_READONLY	0x0b00 // FeliCa Lite RO
+#define SERVICE_FELICA_LITE_READWRITE	0x0900 // FeliCa Lite RW
+
+// Calypso protocol
+#define CALYPSO_GET_RESPONSE   0xC0
+#define CALYPSO_SELECT         0xA4
+#define CALYPSO_INVALIDATE     0x04
+#define CALYPSO_REHABILITATE   0x44
+#define CALYPSO_APPEND_RECORD  0xE2
+#define CALYPSO_DECREASE       0x30
+#define CALYPSO_INCREASE       0x32
+#define CALYPSO_READ_BINARY    0xB0
+#define CALYPSO_READ_RECORD    0xB2
+#define CALYPSO_UPDATE_BINARY  0xD6
+#define CALYPSO_UPDATE_RECORD  0xDC
+#define CALYPSO_WRITE_RECORD   0xD2
+#define CALYPSO_OPEN_SESSION   0x8A
+#define CALYPSO_CLOSE_SESSION  0x8E
+#define CALYPSO_GET_CHALLENGE  0x84
+#define CALYPSO_CHANGE_PIN     0xD8
+#define CALYPSO_VERIFY_PIN     0x20
+#define CALYPSO_SV_GET         0x7C
+#define CALYPSO_SV_DEBIT       0xBA
+#define CALYPSO_SV_RELOAD      0xB8
+#define CALYPSO_SV_UN_DEBIT    0xBC
+#define CALYPSO_SAM_SV_DEBIT   0x54
+#define CALYPSO_SAM_SV_RELOAD  0x56
 
 // iclass / picopass chip config structures and shared routines
 typedef struct {

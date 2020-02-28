@@ -22,12 +22,16 @@
 #include <QtGui>
 
 #include "ui/ui_overlays.h"
+
+class ProxWidget;
+
 /**
  * @brief The actual plot, black area were we paint the graph
  */
 class Plot: public QWidget
 {
 	private:
+		QWidget *master;
 		int GraphStart;
 		double GraphPixelsPerPoint;
 		int CursorAPos;
@@ -91,13 +95,14 @@ class ProxWidget : public QWidget
 class WorkerThread : public QThread {
 		Q_OBJECT;
 	public:
-		WorkerThread(char*, char*, bool);
+		WorkerThread(char*, char*, bool, bool);
 		~WorkerThread();
 		void run();
 	private:
 		char *script_cmds_file = NULL;
 		char *script_cmd = NULL;
 		bool usb_present;
+		bool stayInCommandLoop;
 };
 
 class ProxGuiQT : public QObject
@@ -109,7 +114,7 @@ class ProxGuiQT : public QObject
 		ProxWidget *plotwidget;
 		int argc;
 		char **argv;
-		void (*main_func)(void);
+		//void (*main_func)(void);
 		WorkerThread *proxmarkThread;
 		
 	public:

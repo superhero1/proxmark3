@@ -10,7 +10,6 @@
 #include "usb_cdc.h"
 #include "cmd.h"
 
-
 struct common_area common_area __attribute__((section(".commonarea")));
 unsigned int start_addr, end_addr, bootrom_unlocked;
 extern char _bootrom_start, _bootrom_end, _flash_start, _flash_end;
@@ -29,7 +28,7 @@ static void ConfigClocks(void) {
     // slow clock runs at 32Khz typical regardless of crystal
 
     // enable system clock and USB clock
-    AT91C_BASE_PMC->PMC_SCER = AT91C_PMC_PCK | AT91C_PMC_UDP;
+    AT91C_BASE_PMC->PMC_SCER |= AT91C_PMC_PCK | AT91C_PMC_UDP;
 
 	// enable the clock to the following peripherals
     AT91C_BASE_PMC->PMC_PCER =

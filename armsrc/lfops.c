@@ -4,7 +4,7 @@
 // the license.
 //-----------------------------------------------------------------------------
 // Miscellaneous routines for low frequency tag operations.
-// Tags supported here so far are Texas Instruments (TI), HID
+// Tags supported here so far are Texas Instruments (TI), HID, EM4x05, EM410x
 // Also routines for raw mode reading/simulating of LF waveform
 //-----------------------------------------------------------------------------
 
@@ -26,60 +26,133 @@
 # define OPEN_COIL()	HIGH(GPIO_SSC_DOUT)
 #endif
 
+
+#define START_GAP 31*8 // was 250 // SPEC:  1*8 to 50*8 - typ 15*8 (15fc)
+#define WRITE_GAP 20*8 // was 160 // SPEC:  1*8 to 20*8 - typ 10*8 (10fc)
+#define WRITE_0   18*8 // was 144 // SPEC: 16*8 to 32*8 - typ 24*8 (24fc)
+#define WRITE_1   50*8 // was 400 // SPEC: 48*8 to 64*8 - typ 56*8 (56fc)  432 for T55x7; 448 for E5550
+#define READ_GAP  15*8 
+
+//  VALUES TAKEN FROM EM4x function: SendForward
+//  START_GAP = 440;       (55*8) cycles at 125Khz (8us = 1cycle)
+//  WRITE_GAP = 128;       (16*8)
+//  WRITE_1   = 256 32*8;  (32*8) 
+
+//  These timings work for 4469/4269/4305 (with the 55*8 above)
+//  WRITE_0 = 23*8 , 9*8 
+
+// Sam7s has several timers, we will use the source TIMER_CLOCK1 (aka AT91C_TC_CLKS_TIMER_DIV1_CLOCK)
+// TIMER_CLOCK1 = MCK/2, MCK is running at 48 MHz, Timer is running at 48/2 = 24 MHz
+// Hitag units (T0) have duration of 8 microseconds (us), which is 1/125000 per second (carrier)
+// T0 = TIMER_CLOCK1 / 125000 = 192
+// 1 Cycle = 8 microseconds(us)  == 1 field clock
+
+// new timer:
+//     = 1us = 1.5ticks
+// 1fc = 8us = 12ticks
+
+
 /**
  * Function to do a modulation and then get samples.
  * @param delay_off
- * @param periods  0xFFFF0000 is period_0,  0x0000FFFF is period_1
- * @param useHighFreg
- * @param command
+ * @param period_0
+ * @param period_1
+ * @param command (in binary char array)
  */
-void ModThenAcquireRawAdcSamples125k(uint32_t delay_off, uint32_t periods, uint32_t useHighFreq, uint8_t *command)
-{
-	/* Make sure the tag is reset */
+void ModThenAcquireRawAdcSamples125k(uint32_t delay_off, uint32_t period_0, uint32_t period_1, uint8_t *command) {
+
+	// start timer
+	StartTicks();
+
+	// use lf config settings
+	sample_config *sc = getSamplingConfig();
+
+	// Make sure the tag is reset
 	FpgaDownloadAndGo(FPGA_BITSTREAM_LF);
 	FpgaWriteConfWord(FPGA_MAJOR_MODE_OFF);
-	SpinDelay(200);
+	WaitMS(500);
 
-	uint16_t period_0 =  periods >> 16;
-	uint16_t period_1 =  periods & 0xFFFF;
-	
-	// 95 == 125 KHz  88 == 134.8 KHz
-	int divisor_used = (useHighFreq) ? 88 : 95;
-	sample_config sc = { 0,0,1, divisor_used, 0};
-	setSamplingConfig(&sc);
-
-	//clear read buffer
+	// clear read buffer
 	BigBuf_Clear_keep_EM();
 
-	LFSetupFPGAForADC(sc.divisor, 1);
-
-	// And a little more time for the tag to fully power up
-	SpinDelay(50);
-
+	LFSetupFPGAForADC(sc->divisor, 1);
+	
+	// little more time for the tag to fully power up
+	WaitMS(200);
+	
+	// if delay_off = 0 then just bitbang 1 = antenna on 0 = off for respective periods.
+	bool bitbang = delay_off == 0;
 	// now modulate the reader field
-	while(*command != '\0' && *command != ' ') {
-		FpgaWriteConfWord(FPGA_MAJOR_MODE_OFF);
-		LED_D_OFF();
-		WaitUS(delay_off);
-		FpgaSendCommand(FPGA_CMD_SET_DIVISOR, sc.divisor);
+	if (bitbang) {
+		// HACK it appears the loop and if statements take up about 7us so adjust waits accordingly...
+		uint8_t hack_cnt = 7;
+		if (period_0 < hack_cnt || period_1 < hack_cnt) {
+			DbpString("[!] Warning periods cannot be less than 7us in bit bang mode");
+			FpgaWriteConfWord(FPGA_MAJOR_MODE_OFF);
+			LED_D_OFF();
+			return;
+		}
 
-		FpgaWriteConfWord(FPGA_MAJOR_MODE_LF_ADC | FPGA_LF_ADC_READER_FIELD);
-		LED_D_ON();
-		if(*(command++) == '0')
-			WaitUS(period_0);
-		else
-			WaitUS(period_1);
+		// hack2 needed---  it appears to take about 8-16us to turn the antenna back on 
+		// leading to ~ 1 to 2 125khz samples extra in every off period 
+		// so we should test for last 0 before next 1 and reduce period_0 by this extra amount...
+		// but is this time different for every antenna or other hw builds???  more testing needed
+
+		// prime cmd_len to save time comparing strings while modulating
+		int cmd_len = 0;
+		while(command[cmd_len] != '\0' && command[cmd_len] != ' ')
+			cmd_len++;
+
+		int counter = 0;
+		bool off = false;
+		for (counter = 0; counter < cmd_len; counter++) {
+			// if cmd = 0 then turn field off
+			if (command[counter] == '0') {
+				// if field already off leave alone (affects timing otherwise)
+				if (off == false) {
+					FpgaWriteConfWord(FPGA_MAJOR_MODE_OFF);
+					LED_D_OFF();
+					off = true;
+				}
+				// note we appear to take about 7us to switch over (or run the if statements/loop...)
+				WaitUS(period_0 - hack_cnt);
+			// else if cmd = 1 then turn field on
+			} else {
+				// if field already on leave alone (affects timing otherwise)
+				if (off) {
+					FpgaWriteConfWord(FPGA_MAJOR_MODE_LF_ADC | FPGA_LF_ADC_READER_FIELD);
+					LED_D_ON();
+					off = false;
+				}
+				// note we appear to take about 7us to switch over (or run the if statements/loop...)
+				WaitUS(period_1 - hack_cnt);
+			}
+		}
+	} else { // old mode of cmd read using delay as off period
+		while(*command != '\0' && *command != ' ') {
+			LED_D_ON();
+			if (*(command++) == '0')
+				TurnReadLFOn(period_0);
+			else
+				TurnReadLFOn(period_1);
+
+			LED_D_OFF();
+			FpgaWriteConfWord(FPGA_MAJOR_MODE_OFF);
+			WaitUS(delay_off);
+		}
+
+		FpgaSendCommand(FPGA_CMD_SET_DIVISOR, sc->divisor);
 	}
-	FpgaWriteConfWord(FPGA_MAJOR_MODE_OFF);
-	LED_D_OFF();
-	WaitUS(delay_off);
-	FpgaSendCommand(FPGA_CMD_SET_DIVISOR, sc.divisor);
+
 	FpgaWriteConfWord(FPGA_MAJOR_MODE_LF_ADC | FPGA_LF_ADC_READER_FIELD);
 
 	// now do the read
 	DoAcquisition_config(false, 0);
-	
+
+	// Turn off antenna	
 	FpgaWriteConfWord(FPGA_MAJOR_MODE_OFF);
+	// tell client we are done	
+	cmd_send(CMD_ACK,0,0,0,0,0);    
 }
 
 /* blank r/w tag data stream
@@ -277,7 +350,9 @@ void AcquireTiType(void)
 
 	AT91C_BASE_SSC->SSC_RCMR = SSC_CLOCK_MODE_SELECT(0);
 	AT91C_BASE_SSC->SSC_RFMR = SSC_FRAME_MODE_BITS_IN_WORD(32) | AT91C_SSC_MSBF;
+	// Transmit Clock Mode Register
 	AT91C_BASE_SSC->SSC_TCMR = 0;
+	// Transmit Frame Mode Register
 	AT91C_BASE_SSC->SSC_TFMR = 0;
 	// iceman, FpgaSetupSsc() ?? the code above? can it be replaced?
 	LED_D_ON();
@@ -294,10 +369,11 @@ void AcquireTiType(void)
 	LED_D_OFF();
 
 	i = 0;
-	for(;;) {
-		if(AT91C_BASE_SSC->SSC_SR & AT91C_SSC_RXRDY) {
+	for (;;) {
+		if (AT91C_BASE_SSC->SSC_SR & AT91C_SSC_RXRDY) {
 			buf[i] = AT91C_BASE_SSC->SSC_RHR;	// store 32 bit values in buffer
-			i++; if(i >= TIBUFLEN) break;
+			i++; 
+			if (i >= TIBUFLEN) break;
 		}
 		WDT_HIT();
 	}
@@ -319,6 +395,9 @@ void AcquireTiType(void)
 			}
 		}
 	}
+	
+	// reset SSC
+	FpgaSetupSsc();
 }
 
 // arguments: 64bit data split into 32bit idhi:idlo and optional 16bit crc
@@ -577,7 +656,7 @@ static void fcAll(uint8_t fc, int *n, uint8_t clock, uint16_t *modCnt)
 void CmdHIDsimTAGEx( uint32_t hi, uint32_t lo, int ledcontrol, int numcycles) {
 
 	if (hi > 0xFFF) {
-		DbpString("Tags can only have 44 bits. - USE lf simfsk for larger tags");
+		DbpString("[!] tags can only have 44 bits. - USE lf simfsk for larger tags");
 		return;
 	}
 	
@@ -635,6 +714,7 @@ void CmdHIDsimTAGEx( uint32_t hi, uint32_t lo, int ledcontrol, int numcycles) {
 
 void CmdHIDsimTAG( uint32_t hi, uint32_t lo, int ledcontrol) {
 	CmdHIDsimTAGEx( hi, lo, ledcontrol, -1);
+	DbpString("[!] simulation finished");
 }
 
 // prepare a waveform pattern in the buffer based on the ID given then
@@ -1036,7 +1116,7 @@ void CmdEM410xdemod(int findone, uint32_t *high, uint64_t *low, int ledcontrol) 
 		if (errCnt < 0) continue;
 	
 			errCnt = Em410xDecode(dest, &size, &idx, &hi, &lo);
-			if (errCnt){
+			if (errCnt == 1){
 				if (size == 128){
 					Dbprintf("EM XL TAG ID: %06x%08x%08x - (%05d_%03d_%08d)",
 					  hi,
@@ -1168,29 +1248,6 @@ void CmdIOdemodFSK(int findone, uint32_t *high, uint32_t *low, int ledcontrol) {
  * Q5 tags seems to have issues when these values changes. 
  */
 
-#define START_GAP 31*8 // was 250 // SPEC:  1*8 to 50*8 - typ 15*8 (15fc)
-#define WRITE_GAP 20*8 // was 160 // SPEC:  1*8 to 20*8 - typ 10*8 (10fc)
-#define WRITE_0   18*8 // was 144 // SPEC: 16*8 to 32*8 - typ 24*8 (24fc)
-#define WRITE_1   50*8 // was 400 // SPEC: 48*8 to 64*8 - typ 56*8 (56fc)  432 for T55x7; 448 for E5550
-#define READ_GAP  15*8 
-
-//  VALUES TAKEN FROM EM4x function: SendForward
-//  START_GAP = 440;       (55*8) cycles at 125Khz (8us = 1cycle)
-//  WRITE_GAP = 128;       (16*8)
-//  WRITE_1   = 256 32*8;  (32*8) 
-
-//  These timings work for 4469/4269/4305 (with the 55*8 above)
-//  WRITE_0 = 23*8 , 9*8 
-
-// Sam7s has several timers, we will use the source TIMER_CLOCK1 (aka AT91C_TC_CLKS_TIMER_DIV1_CLOCK)
-// TIMER_CLOCK1 = MCK/2, MCK is running at 48 MHz, Timer is running at 48/2 = 24 MHz
-// Hitag units (T0) have duration of 8 microseconds (us), which is 1/125000 per second (carrier)
-// T0 = TIMER_CLOCK1 / 125000 = 192
-// 1 Cycle = 8 microseconds(us)  == 1 field clock
-
-// new timer:
-//     = 1us = 1.5ticks
-// 1fc = 8us = 12ticks
 void TurnReadLFOn(uint32_t delay) {
 	FpgaWriteConfWord(FPGA_MAJOR_MODE_LF_ADC | FPGA_LF_ADC_READER_FIELD);
 
@@ -1238,7 +1295,7 @@ void T55xxResetRead(void) {
 	TurnReadLFOn(READ_GAP);
 
 	// Acquisition
-	DoPartialAcquisition(0, true, BigBuf_max_traceLen());
+	DoPartialAcquisition(0, true, BigBuf_max_traceLen(), 0);
 
 	// Turn the field off
 	FpgaWriteConfWord(FPGA_MAJOR_MODE_OFF); // field off
@@ -1371,7 +1428,7 @@ void T55xxReadBlock(uint16_t arg0, uint8_t Block, uint32_t Pwd) {
 	
 	// Acquisition
 	// Now do the acquisition
-	DoPartialAcquisition(0, true, 12000);
+	DoPartialAcquisition(0, true, 12000, 0);
 	
 	// Turn the field off
 	FpgaWriteConfWord(FPGA_MAJOR_MODE_OFF); // field off
@@ -1770,7 +1827,7 @@ void EM4xReadWord(uint8_t addr, uint32_t pwd, uint8_t usepwd) {
 
 	WaitUS(400);
 
-	DoPartialAcquisition(20, true, 6000);
+	DoPartialAcquisition(20, true, 6000, 1000);
 
 	FpgaWriteConfWord(FPGA_MAJOR_MODE_OFF);
 	cmd_send(CMD_ACK,0,0,0,0,0);
@@ -1807,7 +1864,7 @@ void EM4xWriteWord(uint32_t flag, uint32_t data, uint32_t pwd) {
 	WaitMS(7);
 
 	//Capture response if one exists
-	DoPartialAcquisition(20, true, 6000);
+	DoPartialAcquisition(20, true, 6000, 1000);
 	
 	FpgaWriteConfWord(FPGA_MAJOR_MODE_OFF);
 	cmd_send(CMD_ACK,0,0,0,0,0);
